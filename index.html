@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WA Diesel Watch — TruLanded Intelligence</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#ffffff;
+    --plane:#faf7f0;          /* warm off-white, biased toward the brand gold */
+    --ink:#23221f;
+    --ink-2:#51504e;          /* TruLanded grey */
+    --muted:#8a857b;
+    --grid:#ece7db;
+    --axis:#cfc8b8;
+    --ring:rgba(35,34,31,0.12);
+    --gold:#d8ad4f;           /* TruLanded gold — chrome only, never a data mark */
+    --gold-deep:#b8891f;
+    --s1:#b8891f;   /* bulk / terminal gate — the brand hue, darkened to hold contrast */
+    --s2:#2a78d6;   /* pump */
+    --s3:#00876c;   /* Singapore gasoil */
+    --up:#c0392b;
+    --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--surface-1);
+    color:var(--ink);
+    font-family:var(--font);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:900px;margin:0 auto;padding:20px 16px 24px}
+  header{margin-bottom:18px;border-bottom:2px solid var(--gold);padding-bottom:14px}
+  .brandrow{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap}
+  .logo{width:184px;height:auto;flex:none}
+  .eyebrow{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-deep);
+           font-weight:600;margin:0 0 6px}
+  h1{font-size:21px;line-height:1.2;margin:0 0 4px;letter-spacing:-0.01em;color:var(--ink)}
+  .sub{font-size:13px;color:var(--ink-2);margin:0;max-width:56ch}
+  .asof{font-size:12px;color:var(--muted);margin:6px 0 0}
+  .headtext{flex:1 1 320px;min-width:0}
+
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0 22px}
+  .tile{background:var(--plane);border:1px solid var(--ring);border-radius:10px;padding:12px 12px 11px}
+  .tile .lab{font-size:11px;color:var(--ink-2);line-height:1.35;margin-bottom:7px;min-height:30px}
+  .tile .val{font-size:22px;line-height:1;letter-spacing:-0.02em}
+  .tile .val span{font-size:12px;color:var(--muted);letter-spacing:0}
+  .tile .delta{font-size:11px;margin-top:6px;color:var(--ink-2)}
+  .tile .delta b{color:var(--up);font-weight:600}
+  .tile .note{font-size:11px;margin-top:6px;color:var(--muted)}
+
+  section{margin:0 0 26px}
+  h2{font-size:14px;margin:0 0 2px;letter-spacing:-0.01em;display:flex;align-items:center;gap:8px}
+  h2::before{content:"";width:11px;height:12px;flex:none;background:var(--gold);
+             clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
+  .cap{font-size:12px;color:var(--ink-2);margin:0 0 12px}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:0 0 8px;font-size:12px;color:var(--ink-2)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .key{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .key.line{height:3px;width:14px;border-radius:2px}
+  .key.hollow{background:var(--surface-1);border:2px solid var(--axis);border-radius:50%;width:10px;height:10px}
+
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  .gl{stroke:var(--grid);stroke-width:1}
+  .ax{stroke:var(--axis);stroke-width:1}
+  .tick{font-size:10.5px;fill:var(--muted);font-variant-numeric:tabular-nums}
+  .endlab{font-size:11px;font-weight:600;fill:var(--ink-2)}
+  .barlab{font-size:11px;fill:var(--ink-2);font-variant-numeric:tabular-nums}
+  .townlab{font-size:11.5px;fill:var(--ink)}
+
+  .tipwrap{position:relative}
+  .tip{position:absolute;pointer-events:none;opacity:0;transition:opacity .09s;
+       background:var(--ink);color:#fff;border-radius:8px;padding:8px 10px;font-size:11.5px;
+       line-height:1.45;white-space:nowrap;transform:translate(-50%,-115%);z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+  .tip b{font-weight:600}
+  .tip .r{display:flex;align-items:center;gap:6px}
+  .tip .d{width:8px;height:8px;border-radius:2px;display:inline-block}
+
+  .toggle{background:none;border:1px solid var(--ring);border-radius:7px;padding:5px 10px;
+          font:inherit;font-size:12px;color:var(--ink-2);cursor:pointer}
+  .toggle:hover{background:var(--plane)}
+  table{border-collapse:collapse;width:100%;font-size:12px;margin-top:12px}
+  th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left;font-variant-numeric:normal}
+  th{color:var(--ink-2);font-weight:600}
+  .hidden{display:none}
+
+  .regiontbl{border-collapse:collapse;width:100%;font-size:12px;margin-top:4px}
+  .regiontbl th,.regiontbl td{padding:8px;border-bottom:1px solid var(--grid);text-align:right;font-variant-numeric:tabular-nums}
+  .regiontbl th:first-child,.regiontbl td:first-child,
+  .regiontbl th:last-child,.regiontbl td:last-child{text-align:left;font-variant-numeric:normal}
+  .regiontbl th{color:var(--ink-2);font-weight:600;font-size:11px;letter-spacing:.02em}
+  .regiontbl td.rname{font-weight:600}
+  .regiontbl td .centres{display:block;font-weight:400;color:var(--muted);font-size:11px;margin-top:2px}
+  .res{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2)}
+  .res i{width:8px;height:8px;border-radius:50%;background:var(--s1);flex:none}
+  .res.none{color:var(--muted)}
+  .res.none i{background:none;border:1px solid var(--axis)}
+  .rep{font-size:11.5px;color:var(--muted)}
+  .reportbox{background:var(--plane);border:1px solid var(--ring);border-radius:10px;padding:12px 14px;margin-top:14px;font-size:12px;color:var(--ink-2);line-height:1.6}
+  .reportbox a{color:var(--s1)}
+  .tablewrap{overflow-x:auto}
+  footer{border-top:1px solid var(--grid);padding-top:12px;font-size:11px;color:var(--muted);line-height:1.6}
+  footer a{color:var(--ink-2)}
+  .scrollhint{display:none;font-size:11px;color:var(--muted);margin:6px 0 0}
+  @media (max-width:640px){
+    .tiles{grid-template-columns:repeat(2,1fr)}
+    h1{font-size:18px}
+    .tipwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .tipwrap svg{min-width:620px}
+    .scrollhint{display:block}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brandrow">
+      <div class="headtext">
+        <p class="eyebrow">TruLanded Intelligence</p>
+        <h1>WA Diesel Watch</h1>
+        <p class="sub">What growers pay at the pump, and the bulk benchmark behind every delivered quote.</p>
+        <p class="asof" id="asof"></p>
+      </div>
+      <img class="logo" src="data:image/png;base64,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" alt="TruLanded Group — On Farm. Ahead of Time." width="460" height="245">
+    </div>
+  </header>
+
+  <div class="tiles" id="priceTiles"></div>
+
+  <section>
+    <h2>Bulk, pump and benchmark — since July</h2>
+    <p class="cap">All three in Australian cents per litre, so they sit on one scale. Gasoil plus shipping and taxes makes up about 95% of the wholesale price, and Australian prices follow Singapore with a one to two week lag.</p>
+    <div class="legend">
+      <span><i class="key line" style="background:var(--s1)"></i> Perth terminal gate (bulk)</span>
+      <span><i class="key line" style="background:var(--s2)"></i> Perth average pump</span>
+      <span><i class="key line" style="background:var(--s3)"></i> Singapore gasoil 10ppm</span>
+    </div>
+    <div class="tipwrap">
+      <svg id="lineChart" viewBox="0 0 900 340" role="img" aria-label="Perth terminal gate, Perth pump and Singapore gasoil prices, July to September 2026"></svg>
+      <div class="tip" id="tipLine"></div>
+    </div>
+    <p class="scrollhint">Swipe the chart sideways to see it all, or open the numbers below.</p>
+  </section>
+
+  <section>
+    <h2>Today's pump diesel across the WA grain belt</h2>
+    <p class="cap">Cheapest and dearest listed site in each centre. The spread inside a town is often wider than the gap between towns — worth knowing before a fleet fills up.</p>
+    <div class="legend">
+      <span><i class="key" style="background:var(--s1);border-radius:50%"></i> Cheapest site</span>
+      <span><i class="key hollow"></i> Dearest site</span>
+    </div>
+    <div class="tipwrap">
+      <svg id="townChart" viewBox="0 0 900 436" role="img" aria-label="Cheapest and dearest diesel price by Western Australian centre"></svg>
+      <div class="tip" id="tipTown"></div>
+    </div>
+    <p class="scrollhint">Swipe the chart sideways to see it all, or open the numbers below.</p>
+  </section>
+
+  <section>
+    <h2>Supply and stock, by region</h2>
+    <p class="cap">Commercial terminal volumes are not published anywhere — what follows is what is on the public record, region by region. Read it as coverage and reserves, not as litres in the tank.</p>
+
+    <div class="tiles" id="stockTiles"></div>
+
+    <div class="tablewrap">
+      <table class="regiontbl">
+        <thead>
+          <tr>
+            <th>Region</th>
+            <th>Sites listing diesel</th>
+            <th>Cheapest today</th>
+            <th>Dearest today</th>
+            <th>State reserve held here</th>
+            <th>Member reports</th>
+          </tr>
+        </thead>
+        <tbody id="tbR"></tbody>
+      </table>
+    </div>
+
+    <div class="reportbox">
+      <b>What members are seeing beats what is published.</b> Depot allocation, carrier delays and on-farm run-outs never make it into a government feed. If your supplier is rationing, quoting long, or has gone quiet, tell us and it goes in this table for everyone —
+      <a href="mailto:holly@trulanded.com.au?subject=Diesel%20report&amp;body=Region%3A%0ASupplier%20or%20depot%3A%0AWhat%20you%20were%20told%3A%0ADate%3A">send a diesel report</a>.
+    </div>
+  </section>
+
+  <section>
+    <button class="toggle" id="tblBtn" aria-expanded="false">Show the numbers</button>
+    <div id="tables" class="hidden">
+      <table>
+        <caption style="text-align:left;font-size:12px;color:var(--ink-2);padding:10px 0 4px">Weekly series (c/L)</caption>
+        <thead><tr><th>Week ending</th><th>Perth TGP</th><th>Perth pump</th><th>Singapore gasoil</th></tr></thead>
+        <tbody id="tbW"></tbody>
+      </table>
+      <table>
+        <caption style="text-align:left;font-size:12px;color:var(--ink-2);padding:14px 0 4px">Pump prices today (c/L)</caption>
+        <thead><tr><th>Centre</th><th>Cheapest</th><th>Dearest</th><th>Spread</th><th>Sites</th></tr></thead>
+        <tbody id="tbT"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Pump prices from <a href="https://www.fuelwatch.wa.gov.au/" target="_blank" rel="noopener">FuelWatch WA</a>; terminal gate and weekly averages from the <a href="https://aip.com.au/pricing/terminal-gate-prices/" target="_blank" rel="noopener">Australian Institute of Petroleum</a>; national stock, days of cover and retail stock-outs from <a href="https://fuelplan.gov.au/fuel-statistics" target="_blank" rel="noopener">Fuel Plan</a>; state reserve locations from the <a href="https://www.wa.gov.au/organisation/government-of-western-australia/fuel-security-government-actions-and-latest-updates" target="_blank" rel="noopener">WA Government fuel security updates</a>. Gasoil figures are week ending Friday. Terminal gate price is GST inclusive and excludes cartage and distributor margin, so a delivered farm price sits above it; off-road use may attract a fuel tax credit at the rate the ATO publishes. Site counts cover the centres named in each region, not every site in it, and FuelWatch is a price notification scheme rather than an availability register — a site can list a price and still be dry. Commercial terminal and depot volumes are not published. Prepared by TruLanded Intelligence — indicative only, not a quote.
+  </footer>
+</div>
+
+<script id="dw-data" type="application/json">
+{
+  "asof": "2026-09-21",
+  "benchDate": "Friday 18 September 2026",
+  "tiles": {
+    "price": [
+      {
+        "lab": "Perth terminal gate price",
+        "lab2": "(bulk benchmark)",
+        "val": "264.3",
+        "unit": "c/L",
+        "delta": {
+          "dir": "up",
+          "amount": "20.0 c/L",
+          "text": "over the week"
+        }
+      },
+      {
+        "lab": "Cheapest WA pump price today",
+        "val": "261.9",
+        "unit": "c/L",
+        "note": "Perrys Esperance"
+      },
+      {
+        "lab": "National average retail diesel",
+        "val": "257.7",
+        "unit": "c/L",
+        "delta": {
+          "dir": "up",
+          "amount": "4.8 c/L",
+          "text": "week on week"
+        }
+      },
+      {
+        "lab": "Singapore gasoil 10ppm",
+        "lab2": "(the price driver)",
+        "val": "152.3",
+        "unit": "c/L",
+        "delta": {
+          "dir": "up",
+          "amount": "7.9 c/L",
+          "text": "week on week"
+        }
+      }
+    ],
+    "stock": [
+      {
+        "lab": "National diesel stock",
+        "lab2": "(days of cover)",
+        "val": "31",
+        "unit": "days",
+        "note": "2,853 ML held, 15 Sep"
+      },
+      {
+        "lab": "WA state diesel reserve",
+        "val": "20",
+        "unit": "ML",
+        "note": "About 1¼ days of WA use"
+      },
+      {
+        "lab": "WA sites out of diesel",
+        "val": "5",
+        "unit": "of 1,002",
+        "note": "18 Sep · 53 nationally"
+      },
+      {
+        "lab": "Regions holding a state reserve",
+        "val": "4",
+        "unit": "of 8",
+        "note": "None in the grain belt"
+      }
+    ]
+  },
+  "weekly": [
+    {
+      "d": "2026-07-05",
+      "label": "5 Jul",
+      "tgp": 174.6,
+      "pump": 185.2,
+      "gas": null
+    },
+    {
+      "d": "2026-07-26",
+      "label": "26 Jul",
+      "tgp": 211.7,
+      "pump": 212.4,
+      "gas": 144.2
+    },
+    {
+      "d": "2026-08-30",
+      "label": "30 Aug",
+      "tgp": 235.1,
+      "pump": 246.2,
+      "gas": 134.9
+    },
+    {
+      "d": "2026-09-06",
+      "label": "6 Sep",
+      "tgp": 232.4,
+      "pump": 245.8,
+      "gas": 144.4
+    },
+    {
+      "d": "2026-09-13",
+      "label": "13 Sep",
+      "tgp": 243.8,
+      "pump": 251.1,
+      "gas": 152.3
+    },
+    {
+      "d": "2026-09-18",
+      "label": "18 Sep",
+      "tgp": 264.3,
+      "pump": null,
+      "gas": null
+    }
+  ],
+  "towns": [
+    {
+      "name": "Esperance",
+      "low": 261.9,
+      "high": 293.9,
+      "n": 4
+    },
+    {
+      "name": "Albany",
+      "low": 263.8,
+      "high": 289.9,
+      "n": 14
+    },
+    {
+      "name": "Bunbury",
+      "low": 263.9,
+      "high": 282.9,
+      "n": 8
+    },
+    {
+      "name": "Rockingham–Kwinana",
+      "low": 264.8,
+      "high": 293.9,
+      "n": 5
+    },
+    {
+      "name": "Katanning",
+      "low": 265.5,
+      "high": 270.0,
+      "n": 4
+    },
+    {
+      "name": "Geraldton",
+      "low": 267.0,
+      "high": 293.9,
+      "n": 17
+    },
+    {
+      "name": "Perth (inner)",
+      "low": 269.3,
+      "high": 295.9,
+      "n": 5
+    },
+    {
+      "name": "Merredin",
+      "low": 269.5,
+      "high": 284.7,
+      "n": 3
+    },
+    {
+      "name": "Kalgoorlie–Boulder",
+      "low": 272.9,
+      "high": 293.9,
+      "n": 7
+    },
+    {
+      "name": "Northam",
+      "low": 273.5,
+      "high": 295.9,
+      "n": 4
+    }
+  ],
+  "regions": [
+    {
+      "name": "Kimberley",
+      "centres": "Kununurra",
+      "sites": 5,
+      "low": 253.9,
+      "high": 298.9,
+      "reserve": "Wyndham, 4–12 ML",
+      "report": ""
+    },
+    {
+      "name": "Goldfields–Esperance",
+      "centres": "Kalgoorlie–Boulder, Esperance",
+      "sites": 11,
+      "low": 261.9,
+      "high": 293.9,
+      "reserve": "Kalgoorlie and Esperance",
+      "report": ""
+    },
+    {
+      "name": "Great Southern",
+      "centres": "Albany, Katanning",
+      "sites": 18,
+      "low": 263.8,
+      "high": 289.9,
+      "reserve": "",
+      "report": ""
+    },
+    {
+      "name": "South West",
+      "centres": "Bunbury",
+      "sites": 8,
+      "low": 263.9,
+      "high": 282.9,
+      "reserve": "",
+      "report": ""
+    },
+    {
+      "name": "Perth metro",
+      "centres": "Perth, Rockingham–Kwinana",
+      "sites": 10,
+      "low": 264.8,
+      "high": 295.9,
+      "reserve": "Kwinana",
+      "report": ""
+    },
+    {
+      "name": "Mid West",
+      "centres": "Geraldton",
+      "sites": 17,
+      "low": 267.0,
+      "high": 293.9,
+      "reserve": "Geraldton",
+      "report": ""
+    },
+    {
+      "name": "Wheatbelt",
+      "centres": "Northam, Merredin, Narrogin",
+      "sites": 8,
+      "low": 269.5,
+      "high": 295.9,
+      "reserve": "",
+      "report": ""
+    },
+    {
+      "name": "Pilbara",
+      "centres": "Port Hedland",
+      "sites": 9,
+      "low": 272.5,
+      "high": 299.9,
+      "reserve": "",
+      "report": ""
+    }
+  ]
+}
+</script>
+<script>
+(function(){
+  "use strict";
+
+  var DATA = JSON.parse(document.getElementById("dw-data").textContent);
+  var weekly = DATA.weekly;
+  var towns = DATA.towns;
+  var regions = DATA.regions;
+  var ASOF = DATA.asof;
+  var NS = "http://www.w3.org/2000/svg";
+
+  document.getElementById("asof").textContent =
+    "Pump prices as at " + fmtDate(ASOF) + " · bulk benchmark " + DATA.benchDate;
+
+  renderTiles("priceTiles", DATA.tiles.price);
+  renderTiles("stockTiles", DATA.tiles.stock);
+
+  function renderTiles(hostId, items){
+    var host = document.getElementById(hostId);
+    if (!host || !items) return;
+    items.forEach(function(t){
+      var tile = document.createElement("div");
+      tile.className = "tile";
+
+      var lab = document.createElement("div");
+      lab.className = "lab";
+      lab.appendChild(document.createTextNode(t.lab));
+      if (t.lab2){
+        lab.appendChild(document.createElement("br"));
+        lab.appendChild(document.createTextNode(t.lab2));
+      }
+      tile.appendChild(lab);
+
+      var val = document.createElement("div");
+      val.className = "val";
+      val.appendChild(document.createTextNode(t.val + " "));
+      var unit = document.createElement("span");
+      unit.textContent = t.unit;
+      val.appendChild(unit);
+      tile.appendChild(val);
+
+      if (t.delta){
+        var d = document.createElement("div");
+        d.className = "delta";
+        var b = document.createElement("b");
+        b.textContent = (t.delta.dir === "down" ? "\u25bc " : "\u25b2 ") + t.delta.amount;
+        d.appendChild(b);
+        d.appendChild(document.createTextNode(" " + t.delta.text));
+        tile.appendChild(d);
+      } else if (t.note){
+        var nt = document.createElement("div");
+        nt.className = "note";
+        nt.textContent = t.note;
+        tile.appendChild(nt);
+      }
+      host.appendChild(tile);
+    });
+  }
+
+  function fmtDate(iso){
+    var m = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    var p = iso.split("-");
+    return parseInt(p[2],10) + " " + m[parseInt(p[1],10)-1] + " " + p[0];
+  }
+  function el(tag, attrs){
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function t(x){ return new Date(x + "T00:00:00").getTime(); }
+
+  /* ---------- line chart ---------- */
+  (function(){
+    var svg = document.getElementById("lineChart"),
+        tip = document.getElementById("tipLine"),
+        W = 900, H = 340,
+        L = 46, R = 74, T = 30, B = 34,
+        pw = W - L - R, ph = H - T - B;
+
+    var xs = weekly.map(function(r){ return t(r.d); });
+    var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+    var yMin = 120, yMax = 280;
+
+    function X(d){ return L + (t(d) - x0) / (x1 - x0) * pw; }
+    function Y(v){ return T + (yMax - v) / (yMax - yMin) * ph; }
+
+    for (var v = 120; v <= 280; v += 40){
+      svg.appendChild(el("line", {class:"gl", x1:L, x2:L+pw, y1:Y(v), y2:Y(v)}));
+      var tk = el("text", {class:"tick", x:L-8, y:Y(v)+3.5, "text-anchor":"end"});
+      tk.textContent = v; svg.appendChild(tk);
+    }
+    var yl = el("text", {class:"tick", x:L-8, y:T-14, "text-anchor":"end"});
+    yl.textContent = "c/L"; svg.appendChild(yl);
+    svg.appendChild(el("line", {class:"ax", x1:L, x2:L+pw, y1:Y(yMin), y2:Y(yMin)}));
+
+    weekly.forEach(function(r){
+      var tx = el("text", {class:"tick", x:X(r.d), y:H-12, "text-anchor":"middle"});
+      tx.textContent = r.label; svg.appendChild(tx);
+    });
+
+    var series = [
+      {key:"tgp",  color:"var(--s1)", name:"Perth terminal gate"},
+      {key:"pump", color:"var(--s2)", name:"Perth average pump"},
+      {key:"gas",  color:"var(--s3)", name:"Singapore gasoil"}
+    ];
+
+    series.forEach(function(s){
+      var pts = weekly.filter(function(r){ return r[s.key] !== null; });
+      var d = pts.map(function(r,i){ return (i?"L":"M") + X(r.d).toFixed(1) + " " + Y(r[s.key]).toFixed(1); }).join(" ");
+      svg.appendChild(el("path", {d:d, fill:"none", stroke:s.color, "stroke-width":2,
+                                  "stroke-linejoin":"round", "stroke-linecap":"round"}));
+      pts.forEach(function(r){
+        svg.appendChild(el("circle", {cx:X(r.d), cy:Y(r[s.key]), r:4.5, fill:s.color,
+                                      stroke:"var(--surface-1)", "stroke-width":2}));
+      });
+      var last = pts[pts.length-1];
+      /* pump ends mid-plot, so its label goes up and to the left of the last point */
+      var left = s.key === "pump";
+      var dx = left ? -10 : 10, dy = left ? -22 : 4;
+      var lab = el("text", {class:"endlab", x:X(last.d)+dx, y:Y(last[s.key])+dy, fill:s.color,
+                            "text-anchor": left ? "end" : "start"});
+      lab.textContent = last[s.key].toFixed(1);
+      svg.appendChild(lab);
+      var nm = el("text", {class:"tick", x:X(last.d)+dx, y:Y(last[s.key])+dy+13,
+                           "text-anchor": left ? "end" : "start"});
+      nm.textContent = s.key === "tgp" ? "bulk" : (s.key === "pump" ? "pump" : "gasoil");
+      svg.appendChild(nm);
+    });
+
+    var hairline = el("line", {class:"ax", x1:0, x2:0, y1:T, y2:T+ph, opacity:0});
+    svg.appendChild(hairline);
+
+    svg.addEventListener("mousemove", onMove);
+    svg.addEventListener("mouseleave", function(){ tip.style.opacity = 0; hairline.setAttribute("opacity", 0); });
+    svg.addEventListener("touchstart", onMove, {passive:true});
+    svg.addEventListener("touchmove", onMove, {passive:true});
+
+    function onMove(ev){
+      var rect = svg.getBoundingClientRect();
+      var cx = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
+      var ratio = W / rect.width;
+      var vx = cx * ratio;
+      var best = null, bd = 1e9;
+      weekly.forEach(function(r){
+        var dd = Math.abs(X(r.d) - vx);
+        if (dd < bd){ bd = dd; best = r; }
+      });
+      if (!best) return;
+      hairline.setAttribute("x1", X(best.d)); hairline.setAttribute("x2", X(best.d));
+      hairline.setAttribute("opacity", 1);
+      var rows = series.filter(function(s){ return best[s.key] !== null; }).map(function(s){
+        return '<div class="r"><i class="d" style="background:' + s.color + '"></i>' +
+               s.name + ' <b>' + best[s.key].toFixed(1) + '</b></div>';
+      }).join("");
+      tip.innerHTML = '<b>' + (best.pump === null ? best.label : "Week ending " + best.label) + '</b>' + rows;
+      tip.style.left = (X(best.d) / ratio) + "px";
+      tip.style.top  = (T + ph * 0.32) + "px";
+      tip.style.opacity = 1;
+    }
+  })();
+
+  /* ---------- dumbbell by town ---------- */
+  (function(){
+    var svg = document.getElementById("townChart"),
+        tip = document.getElementById("tipTown"),
+        W = 900, H = 436,
+        L = 152, R = 58, T = 26, B = 30,
+        pw = W - L - R, ph = H - T - B;
+
+    var xMin = 255, xMax = 300;
+    function X(v){ return L + (v - xMin) / (xMax - xMin) * pw; }
+    var step = ph / towns.length;
+
+    for (var v = 260; v <= 300; v += 10){
+      svg.appendChild(el("line", {class:"gl", x1:X(v), x2:X(v), y1:T-6, y2:T+ph}));
+      var tk = el("text", {class:"tick", x:X(v), y:T-12, "text-anchor":"middle"});
+      tk.textContent = v; svg.appendChild(tk);
+    }
+    var unit = el("text", {class:"tick", x:L-8, y:T-12, "text-anchor":"end"});
+    unit.textContent = "c/L"; svg.appendChild(unit);
+
+    towns.forEach(function(r, i){
+      var y = T + step * i + step/2;
+
+      var nm = el("text", {class:"townlab", x:L-14, y:y+4, "text-anchor":"end"});
+      nm.textContent = r.name; svg.appendChild(nm);
+
+      svg.appendChild(el("line", {x1:X(r.low), x2:X(r.high), y1:y, y2:y,
+                                  stroke:"var(--axis)", "stroke-width":2, "stroke-linecap":"round"}));
+      svg.appendChild(el("circle", {cx:X(r.high), cy:y, r:5.5, fill:"var(--surface-1)",
+                                    stroke:"var(--axis)", "stroke-width":2}));
+      svg.appendChild(el("circle", {cx:X(r.low), cy:y, r:5.5, fill:"var(--s1)",
+                                    stroke:"var(--surface-1)", "stroke-width":2}));
+
+      var lo = el("text", {class:"barlab", x:X(r.low)-11, y:y+4, "text-anchor":"end"});
+      lo.textContent = r.low.toFixed(1); svg.appendChild(lo);
+      var hi = el("text", {class:"barlab", x:X(r.high)+11, y:y+4});
+      hi.textContent = r.high.toFixed(1); svg.appendChild(hi);
+
+      var hit = el("rect", {x:L-150, y:y-step/2, width:pw+150, height:step, fill:"transparent"});
+      hit.addEventListener("mouseenter", function(){
+        tip.innerHTML = '<b>' + r.name + '</b>' +
+          '<div class="r"><i class="d" style="background:var(--s1)"></i>Cheapest <b>' + r.low.toFixed(1) + '</b></div>' +
+          '<div class="r"><i class="d" style="background:var(--axis)"></i>Dearest <b>' + r.high.toFixed(1) + '</b></div>' +
+          '<div class="r">Spread ' + (r.high - r.low).toFixed(1) + ' c/L across ' + r.n + ' site' + (r.n>1?'s':'') + '</div>';
+        var rect = svg.getBoundingClientRect(), ratio = W / rect.width;
+        tip.style.left = (X((r.low + r.high)/2) / ratio) + "px";
+        tip.style.top  = (y / ratio + 6) + "px";
+        tip.style.opacity = 1;
+      });
+      hit.addEventListener("mouseleave", function(){ tip.style.opacity = 0; });
+      svg.appendChild(hit);
+    });
+  })();
+
+  /* ---------- region table ---------- */
+  (function(){
+    var body = document.getElementById("tbR");
+    regions.forEach(function(r){
+      var tr = document.createElement("tr");
+      var res = r.reserve
+        ? '<span class="res"><i></i>' + r.reserve + '</span>'
+        : '<span class="res none"><i></i>None held here</span>';
+      var rep = r.report
+        ? '<span class="rep">' + r.report + '</span>'
+        : '<span class="rep">No reports this week</span>';
+      tr.innerHTML =
+        '<td class="rname">' + r.name + '<span class="centres">' + r.centres + '</span></td>' +
+        '<td>' + r.sites + '</td>' +
+        '<td>' + r.low.toFixed(1) + '</td>' +
+        '<td>' + r.high.toFixed(1) + '</td>' +
+        '<td>' + res + '</td>' +
+        '<td>' + rep + '</td>';
+      body.appendChild(tr);
+    });
+  })();
+
+  /* ---------- table view ---------- */
+  (function(){
+    var bw = document.getElementById("tbW"), bt = document.getElementById("tbT");
+    weekly.forEach(function(r){
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + r.label + " 2026</td><td>" + r.tgp.toFixed(1) + "</td><td>" +
+        (r.pump === null ? "—" : r.pump.toFixed(1)) + "</td><td>" +
+        (r.gas === null ? "—" : r.gas.toFixed(1)) + "</td>";
+      bw.appendChild(tr);
+    });
+    towns.forEach(function(r){
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + r.name + "</td><td>" + r.low.toFixed(1) + "</td><td>" + r.high.toFixed(1) +
+        "</td><td>" + (r.high - r.low).toFixed(1) + "</td><td>" + r.n + "</td>";
+      bt.appendChild(tr);
+    });
+    var btn = document.getElementById("tblBtn"), box = document.getElementById("tables");
+    btn.addEventListener("click", function(){
+      var open = box.classList.toggle("hidden") === false;
+      btn.textContent = open ? "Hide the numbers" : "Show the numbers";
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  })();
+})();
+</script>
+</body>
+</html>
