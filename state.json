@@ -1,18 +1,1 @@
-{
-  "fails": {
-    "fuelwatch": 0,
-    "tgp": 1
-  },
-  "last_good": {
-    "fuelwatch": {
-      "centres": 13,
-      "date": "2026-09-22"
-    },
-    "tgp": {
-      "date": "2026-09-22",
-      "seen": "2026-09-22",
-      "value": 228.1
-    }
-  },
-  "updated": "2026-09-22T04:50:47+00:00"
-}
+{}
