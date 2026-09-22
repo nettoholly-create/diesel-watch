@@ -1,7 +1,7 @@
 {
   "fails": {
     "fuelwatch": 0,
-    "tgp": 0
+    "tgp": 1
   },
   "last_good": {
     "fuelwatch": {
@@ -14,5 +14,5 @@
       "value": 228.1
     }
   },
-  "updated": "2026-09-22T04:39:23+00:00"
+  "updated": "2026-09-22T04:50:47+00:00"
 }
