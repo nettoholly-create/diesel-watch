@@ -1,1 +1,64 @@
+name: Update diesel watch
 
+# 07:30 UTC = 3:30pm Perth (AWST, no daylight saving), weekdays only —
+# just after FuelWatch publishes the next day's prices at 2:30pm.
+on:
+  schedule:
+    - cron: '30 7 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diesel-watch-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refresh the page data
+        id: refresh
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/update_page.py | tee run.log || echo "code=1" >> "$GITHUB_OUTPUT"
+          grep -m1 '^SUMMARY:' run.log | sed 's/^SUMMARY: /summary=/' >> "$GITHUB_OUTPUT" || true
+
+      - name: Commit and publish
+        shell: bash
+        run: |
+          if [ -z "$(git status --porcelain index.html state.json)" ]; then
+            echo "No change — nothing to publish."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html state.json
+          MSG="${{ steps.refresh.outputs.summary }}"
+          git commit -m "${MSG:-Diesel watch refresh}"
+          git push
+
+      # Keeps the fetched pages for 14 days so a broken parse can be diagnosed
+      # without guessing. Not committed to the repo.
+      - name: Keep the fetched sources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fetched-sources
+          path: |
+            debug/
+            run.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # A source that has failed twice running fails the job, so GitHub emails
+      # the repo owner. A silently stale page is the failure mode to avoid.
+      - name: Fail if a source has broken
+        if: steps.refresh.outputs.code == '1'
+        run: |
+          echo "A data source has failed twice in a row — see run.log in the artifacts."
+          exit 1
