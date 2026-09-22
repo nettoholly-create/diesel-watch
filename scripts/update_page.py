@@ -50,20 +50,22 @@ AIP_TGP = "https://aip.com.au/pricing/terminal-gate-prices/"
 
 # Centre name on the page -> FuelWatch query. Names are fixed here on purpose:
 # the feed returns suburbs, not centres, so they cannot be derived from the data.
+DIESEL = "4"           # FuelWatch product code; without it the feed returns unleaded
+
 CENTRES = [
-    ("Perth (inner)",       {"Suburb": "PERTH",        "Surrounding": "yes"}),
-    ("Rockingham-Kwinana",  {"Suburb": "ROCKINGHAM",   "Surrounding": "yes"}),
-    ("Geraldton",           {"Suburb": "GERALDTON",    "Surrounding": "yes"}),
-    ("Northam",             {"Suburb": "NORTHAM",      "Surrounding": "yes"}),
-    ("Merredin",            {"Suburb": "MERREDIN",     "Surrounding": "yes"}),
-    ("Narrogin",            {"Suburb": "NARROGIN",     "Surrounding": "yes"}),
-    ("Katanning",           {"Suburb": "KATANNING",    "Surrounding": "yes"}),
-    ("Albany",              {"Suburb": "ALBANY",       "Surrounding": "yes"}),
-    ("Bunbury",             {"Suburb": "BUNBURY",      "Surrounding": "yes"}),
-    ("Esperance",           {"Suburb": "ESPERANCE",    "Surrounding": "yes"}),
-    ("Port Hedland",        {"Suburb": "PORT HEDLAND", "Surrounding": "yes"}),
-    ("Kununurra",           {"Suburb": "KUNUNURRA",    "Surrounding": "yes"}),
-    ("Kalgoorlie-Boulder",  {"Region": "1"}),
+    ("Perth (inner)",       {"Product": DIESEL, "Suburb": "PERTH",        "Surrounding": "yes"}),
+    ("Rockingham-Kwinana",  {"Product": DIESEL, "Suburb": "ROCKINGHAM",   "Surrounding": "yes"}),
+    ("Geraldton",           {"Product": DIESEL, "Suburb": "GERALDTON",    "Surrounding": "yes"}),
+    ("Northam",             {"Product": DIESEL, "Suburb": "NORTHAM",      "Surrounding": "yes"}),
+    ("Merredin",            {"Product": DIESEL, "Suburb": "MERREDIN",     "Surrounding": "yes"}),
+    ("Narrogin",            {"Product": DIESEL, "Suburb": "NARROGIN",     "Surrounding": "yes"}),
+    ("Katanning",           {"Product": DIESEL, "Suburb": "KATANNING",    "Surrounding": "yes"}),
+    ("Albany",              {"Product": DIESEL, "Suburb": "ALBANY",       "Surrounding": "yes"}),
+    ("Bunbury",             {"Product": DIESEL, "Suburb": "BUNBURY",      "Surrounding": "yes"}),
+    ("Esperance",           {"Product": DIESEL, "Suburb": "ESPERANCE",    "Surrounding": "yes"}),
+    ("Port Hedland",        {"Product": DIESEL, "Suburb": "PORT HEDLAND", "Surrounding": "yes"}),
+    ("Kununurra",           {"Product": DIESEL, "Suburb": "KUNUNURRA",    "Surrounding": "yes"}),
+    ("Kalgoorlie-Boulder",  {"Product": DIESEL, "Region": "1"}),
 ]
 
 # Centres that appear in the dumbbell chart, in the page's own naming.
@@ -238,35 +240,47 @@ def parse_dates(text):
 
 def parse_perth_tgp(html):
     """
-    Return (series, date) where series is that week's Perth diesel TGP values in
-    page order and date is the day the last value belongs to. Either may be None.
+    Return (series, date) for Perth DIESEL: that table's values in column order,
+    and the date belonging to the last one.
+
+    The page carries a petrol table first and a diesel table second, both with a
+    Perth row, so the diesel table is found by its own heading rather than by
+    position or by the first match.
     """
+    marker = re.search(r"(?i)diesel\s*\(cents per litre", html)
+    if not marker:
+        return None, None
+    table = re.search(r"(?is)<table\b.*?</table>", html[marker.end():])
+    if not table:
+        return None, None
+    table_html = table.group(0)
+
+    rows = re.findall(r"(?is)<tr\b.*?</tr>", table_html)
+    header_dates = parse_dates(strip_tags(rows[0])) if rows else []
+
     series = None
-
-    # First try: the table row that names Perth.
-    for row in re.findall(r"(?is)<tr\b.*?</tr>", html):
-        if not re.search(r"(?i)\bperth\b", strip_tags(row)):
-            continue
-        vals = numbers_in_range(strip_tags(row))
-        if vals:
-            series = vals
-            break
-
-    # Fallback: the run of numbers following the word Perth in the flat text.
-    if not series:
-        text = strip_tags(html)
-        m = re.search(r"(?i)\bperth\b", text)
-        if m:
-            vals = numbers_in_range(text[m.end():m.end() + 260])
+    for row in rows:
+        text = strip_tags(row)
+        if re.search(r"(?i)\bperth\b", text):
+            vals = numbers_in_range(text)
             if vals:
-                series = vals[:5]
+                series = vals
+                break
+    if not series:
+        return None, None
 
-    # The page carries the last five published weekdays. Take the most recent
-    # date that has actually happened; a future date means we misread the page.
+    # Pair the last value with its own column date where the counts line up;
+    # otherwise fall back to the most recent date on the page that has passed.
     today = dt.date.today()
-    dates = [d for d in parse_dates(strip_tags(html)) if d <= today]
-    latest = max(dates) if dates else None
-    return series, latest
+    when = None
+    if len(header_dates) == len(series):
+        when = header_dates[-1]
+    else:
+        past = [d for d in parse_dates(strip_tags(html)) if d <= today]
+        when = max(past) if past else None
+    if when and when > today:
+        when = None
+    return series, when
 
 
 def collect_tgp(offline, previous):
