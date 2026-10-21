@@ -211,7 +211,7 @@
 </div>
 
 <script id="dw-data" type="application/json">
-{
+{{
   "asof": "2026-10-20",
   "benchDate": "Tuesday 20 October 2026",
   "tiles": {
@@ -221,11 +221,7 @@
         "lab2": "(bulk benchmark)",
         "val": "253.2",
         "unit": "c/L",
-        "delta": {
-          "dir": "up",
-          "amount": "0.5 c/L",
-          "text": "over the week"
-        }
+        "delta": { "dir": "down", "amount": "0.8 c/L", "text": "over the week" }
       },
       {
         "lab": "Cheapest WA pump price today",
@@ -235,33 +231,25 @@
       },
       {
         "lab": "National average retail diesel",
-        "val": "284.7",
+        "val": "280.7",
         "unit": "c/L",
-        "delta": {
-          "dir": "down",
-          "amount": "2.0 c/L",
-          "text": "week on week"
-        }
+        "delta": { "dir": "down", "amount": "2.3 c/L", "text": "week on week" }
       },
       {
         "lab": "Singapore gasoil 10ppm",
         "lab2": "(the price driver)",
-        "val": "157.1",
+        "val": "153.4",
         "unit": "c/L",
-        "delta": {
-          "dir": "up",
-          "amount": "0.4 c/L",
-          "text": "week on week"
-        }
+        "delta": { "dir": "down", "amount": "0.2 c/L", "text": "week on week" }
       }
     ],
     "stock": [
       {
         "lab": "National diesel stock",
         "lab2": "(days of cover)",
-        "val": "32",
+        "val": "33",
         "unit": "days",
-        "note": "2,998 ML held, 29 Sep"
+        "note": "3,044 ML held, 13 Oct"
       },
       {
         "lab": "WA state diesel reserve",
@@ -271,9 +259,9 @@
       },
       {
         "lab": "WA sites out of diesel",
-        "val": "4",
+        "val": "6",
         "unit": "of 1,002",
-        "note": "2 Oct · 50 nationally"
+        "note": "16 Oct · 39 nationally"
       },
       {
         "lab": "Regions holding a state reserve",
@@ -284,207 +272,41 @@
     ]
   },
   "weekly": [
-    {
-      "d": "2026-07-05",
-      "label": "5 Jul",
-      "tgp": 174.6,
-      "pump": 185.2,
-      "gas": null
-    },
-    {
-      "d": "2026-07-26",
-      "label": "26 Jul",
-      "tgp": 211.7,
-      "pump": 212.4,
-      "gas": 144.2
-    },
-    {
-      "d": "2026-08-30",
-      "label": "30 Aug",
-      "tgp": 235.1,
-      "pump": 246.2,
-      "gas": 134.9
-    },
-    {
-      "d": "2026-09-06",
-      "label": "6 Sep",
-      "tgp": 232.4,
-      "pump": 245.8,
-      "gas": 144.4
-    },
-    {
-      "d": "2026-09-13",
-      "label": "13 Sep",
-      "tgp": 243.8,
-      "pump": 251.1,
-      "gas": 152.3
-    },
-    {
-      "d": "2026-09-20",
-      "label": "20 Sep",
-      "tgp": 264.3,
-      "pump": 267.6,
-      "gas": 170.5
-    },
-    {
-      "d": "2026-09-27",
-      "label": "27 Sep",
-      "tgp": 261.9,
-      "pump": 279.7,
-      "gas": 156.7
-    },
-    {
-      "d": "2026-10-04",
-      "label": "4 Oct",
-      "tgp": 256.3,
-      "pump": 275.3,
-      "gas": 157.1
-    },
-    {
-      "d": "2026-10-20",
-      "label": "20 Oct",
-      "tgp": 253.2,
-      "pump": null,
-      "gas": null
-    }
+    { "d": "2026-07-05", "label": "5 Jul", "tgp": 174.6, "pump": 185.2, "gas": null },
+    { "d": "2026-07-26", "label": "26 Jul", "tgp": 211.7, "pump": 212.4, "gas": 144.2 },
+    { "d": "2026-08-30", "label": "30 Aug", "tgp": 235.1, "pump": 246.2, "gas": 134.9 },
+    { "d": "2026-09-06", "label": "6 Sep", "tgp": 232.4, "pump": 245.8, "gas": 144.4 },
+    { "d": "2026-09-13", "label": "13 Sep", "tgp": 243.8, "pump": 251.1, "gas": 152.3 },
+    { "d": "2026-09-20", "label": "20 Sep", "tgp": 264.3, "pump": 267.6, "gas": 170.5 },
+    { "d": "2026-09-27", "label": "27 Sep", "tgp": 261.9, "pump": 279.7, "gas": 156.7 },
+    { "d": "2026-10-04", "label": "4 Oct", "tgp": 256.3, "pump": 275.3, "gas": 157.1 },
+    { "d": "2026-10-11", "label": "11 Oct", "tgp": 254.7, "pump": 272.4, "gas": 153.6 },
+    { "d": "2026-10-18", "label": "18 Oct", "tgp": 253.8, "pump": 270.0, "gas": 153.4 },
+    { "d": "2026-10-20", "label": "20 Oct", "tgp": 253.2, "pump": null, "gas": null }
   ],
   "towns": [
-    {
-      "name": "Perth (inner)",
-      "low": 253.3,
-      "high": 282.9,
-      "n": 5
-    },
-    {
-      "name": "Rockingham–Kwinana",
-      "low": 257.3,
-      "high": 283.9,
-      "n": 5
-    },
-    {
-      "name": "Geraldton",
-      "low": 259.2,
-      "high": 292.0,
-      "n": 17
-    },
-    {
-      "name": "Bunbury",
-      "low": 259.3,
-      "high": 269.9,
-      "n": 8
-    },
-    {
-      "name": "Albany",
-      "low": 263.9,
-      "high": 278.9,
-      "n": 14
-    },
-    {
-      "name": "Katanning",
-      "low": 265.5,
-      "high": 290.0,
-      "n": 4
-    },
-    {
-      "name": "Northam",
-      "low": 267.9,
-      "high": 277.9,
-      "n": 4
-    },
-    {
-      "name": "Merredin",
-      "low": 268.5,
-      "high": 269.7,
-      "n": 3
-    },
-    {
-      "name": "Kalgoorlie–Boulder",
-      "low": 269.9,
-      "high": 282.9,
-      "n": 7
-    },
-    {
-      "name": "Esperance",
-      "low": 272.9,
-      "high": 285.9,
-      "n": 4
-    }
+    { "name": "Perth (inner)", "low": 253.3, "high": 282.9, "n": 5 },
+    { "name": "Rockingham–Kwinana", "low": 257.3, "high": 283.9, "n": 5 },
+    { "name": "Geraldton", "low": 259.2, "high": 292.0, "n": 17 },
+    { "name": "Bunbury", "low": 259.3, "high": 269.9, "n": 8 },
+    { "name": "Albany", "low": 263.9, "high": 278.9, "n": 14 },
+    { "name": "Katanning", "low": 265.5, "high": 290.0, "n": 4 },
+    { "name": "Northam", "low": 267.9, "high": 277.9, "n": 4 },
+    { "name": "Merredin", "low": 268.5, "high": 269.7, "n": 3 },
+    { "name": "Kalgoorlie–Boulder", "low": 269.9, "high": 282.9, "n": 7 },
+    { "name": "Esperance", "low": 272.9, "high": 285.9, "n": 4 }
   ],
   "regions": [
-    {
-      "name": "Kimberley",
-      "centres": "Kununurra",
-      "sites": 5,
-      "low": 268.9,
-      "high": 284.9,
-      "reserve": "Wyndham, 4–12 ML",
-      "report": ""
-    },
-    {
-      "name": "Goldfields–Esperance",
-      "centres": "Kalgoorlie–Boulder, Esperance",
-      "sites": 11,
-      "low": 269.9,
-      "high": 285.9,
-      "reserve": "Kalgoorlie and Esperance",
-      "report": ""
-    },
-    {
-      "name": "Great Southern",
-      "centres": "Albany, Katanning",
-      "sites": 18,
-      "low": 263.9,
-      "high": 290.0,
-      "reserve": "",
-      "report": ""
-    },
-    {
-      "name": "South West",
-      "centres": "Bunbury",
-      "sites": 8,
-      "low": 259.3,
-      "high": 269.9,
-      "reserve": "",
-      "report": ""
-    },
-    {
-      "name": "Perth metro",
-      "centres": "Perth, Rockingham–Kwinana",
-      "sites": 10,
-      "low": 253.3,
-      "high": 283.9,
-      "reserve": "Kwinana",
-      "report": ""
-    },
-    {
-      "name": "Mid West",
-      "centres": "Geraldton",
-      "sites": 17,
-      "low": 259.2,
-      "high": 292.0,
-      "reserve": "Geraldton",
-      "report": ""
-    },
-    {
-      "name": "Wheatbelt",
-      "centres": "Northam, Merredin, Narrogin",
-      "sites": 8,
-      "low": 267.9,
-      "high": 277.9,
-      "reserve": "",
-      "report": ""
-    },
-    {
-      "name": "Pilbara",
-      "centres": "Port Hedland",
-      "sites": 10,
-      "low": 273.9,
-      "high": 293.9,
-      "reserve": "",
-      "report": ""
-    }
+    { "name": "Kimberley", "centres": "Kununurra", "sites": 5, "low": 268.9, "high": 284.9, "reserve": "Wyndham, 4–12 ML", "report": "" },
+    { "name": "Goldfields–Esperance", "centres": "Kalgoorlie–Boulder, Esperance", "sites": 11, "low": 269.9, "high": 285.9, "reserve": "Kalgoorlie and Esperance", "report": "" },
+    { "name": "Great Southern", "centres": "Albany, Katanning", "sites": 18, "low": 263.9, "high": 290.0, "reserve": "", "report": "" },
+    { "name": "South West", "centres": "Bunbury", "sites": 8, "low": 259.3, "high": 269.9, "reserve": "", "report": "" },
+    { "name": "Perth metro", "centres": "Perth, Rockingham–Kwinana", "sites": 10, "low": 253.3, "high": 283.9, "reserve": "Kwinana", "report": "" },
+    { "name": "Mid West", "centres": "Geraldton", "sites": 17, "low": 259.2, "high": 292.0, "reserve": "Geraldton", "report": "" },
+    { "name": "Wheatbelt", "centres": "Northam, Merredin, Narrogin", "sites": 8, "low": 267.9, "high": 277.9, "reserve": "", "report": "" },
+    { "name": "Pilbara", "centres": "Port Hedland", "sites": 10, "low": 273.9, "high": 293.9, "reserve": "", "report": "" }
   ]
-}
+}}
 </script>
 <script>
 (function(){
