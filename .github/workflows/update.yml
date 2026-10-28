@@ -20,24 +20,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Refresh the page data
+- name: Install dependencies
+        run: pip install pdfplumber      - name: Refresh the page data
         id: refresh
         shell: bash
         run: |
           set -o pipefail
-          python3 scripts/update_page.py | tee run.log || echo "code=1" >> "$GITHUB_OUTPUT"
+
+          
+           - name: Refresh the weekly figures
+        id: weekly
+        shell: bash
+        run: |
+          python3 scripts/update_weekly.py 2>&1 | tee weekly.log
+          if grep -q '^WEEKLY-ERROR' weekly.log; then
+            echo "weekly_problem=1" >> "$GITHUB_OUTPUT"
+          fipython3 scripts/update_page.py | tee run.log || echo "code=1" >> "$GITHUB_OUTPUT"
           grep -m1 '^SUMMARY:' run.log | sed 's/^SUMMARY: /summary=/' >> "$GITHUB_OUTPUT" || true
 
       - name: Commit and publish
         shell: bash
         run: |
-          if [ -z "$(git status --porcelain index.html state.json)" ]; then
+          if [ -z "$(git status --porcelain index.html state.json scripts/state_weekly.json)" ]; then          if [ -z "$(git status --porcelain index.html state.json)" ]; then
             echo "No change — nothing to publish."
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html state.json
+ git add index.html state.json scripts/state_weekly.json          git add index.html state.json
           MSG="${{ steps.refresh.outputs.summary }}"
           git commit -m "${MSG:-Diesel watch refresh}"
           git push
@@ -52,6 +62,7 @@ jobs:
           path: |
             debug/
             run.log
+            weekly.log
           retention-days: 14
           if-no-files-found: ignore
 
@@ -61,4 +72,9 @@ jobs:
         if: steps.refresh.outputs.code == '1'
         run: |
           echo "A data source has failed twice in a row — see run.log in the artifacts."
+          exit 1
+ - name: Fail if a weekly source has broken
+        if: steps.weekly.outputs.weekly_problem == '1'
+        run: |
+          echo "A weekly source could not be parsed. See weekly.log in the artifact."
           exit 1
