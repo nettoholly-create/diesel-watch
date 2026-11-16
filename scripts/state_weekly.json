@@ -1,5 +1,5 @@
 {
-  "last_report": "https://aip.com.au/pricing/weekly-diesel-prices-report-week-ending-8-november-2026/",
+  "last_report": "https://aip.com.au/pricing/weekly-diesel-prices-report-week-ending-15-november-2026/",
   "tgp_history": {
     "2026-10-09": 254.7,
     "2026-10-16": 253.8,
@@ -13,7 +13,8 @@
     "2026-11-10": 245.5,
     "2026-11-11": 245.1,
     "2026-11-12": 242.5,
-    "2026-11-13": 239.3
+    "2026-11-13": 239.3,
+    "2026-11-16": 238.6
   },
-  "updated": "2026-11-13T15:31:31+00:00"
+  "updated": "2026-11-16T17:12:42+00:00"
 }
