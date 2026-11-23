@@ -7,7 +7,7 @@ Companion to scripts/update_page.py. That script owns the DAILY fields
 everything it does not touch:
 
   tiles.price[2]  national average retail diesel      <- AIP Weekly Diesel Prices Report
-  tiles.price[3]  Singapore gasoil 10ppm              <- AIP Weekly Diesel Prices Report
+  tiles.price[3]  Singapore gasoil 10ppm              <- NOT AVAILABLE, see below
   tiles.stock[0]  national days of cover + ML held    <- fuelplan.gov.au
   tiles.stock[2]  WA sites out of diesel              <- fuelplan.gov.au
   weekly[]        a new row per week-ending report    <- AIP Weekly Diesel Prices Report
@@ -19,6 +19,18 @@ any region's `reserve` / `report` field. Those move rarely and are changed by ha
 RUN ORDER. This must run AFTER update_page.py in the same job, because it
 corrects the TGP delta that update_page.py writes, and it reads the TGP value
 update_page.py has just published.
+
+WHAT THE WEEKLY PDF ACTUALLY CONTAINS (checked against the week ending
+22 November 2026 report on 23 Nov 2026):
+  national average retail diesel  YES  "Average Diesel retail price this week"
+  daily Perth TGP table           YES  dates read "16 November 2026"
+  Singapore gasoil 10ppm          NO   drawn only inside chart images
+  Perth retail (the weekly pump)  NO   that table is rotated text and extracts
+                                       as fragments like "2 6 4 .6"
+Gasoil and Perth retail are therefore OPTIONAL. Their absence is not an error
+and does not block the weekly chart row; the row is recorded with the TGP and
+nulls for the other two, which the chart already tolerates. Both need another
+source if they are to update automatically.
 
 THE TGP DELTA FIX. update_page.py's apply_tgp() computes `move = value - series[0]`
 where series is AIP's rolling five-day row, so it compares against the oldest
@@ -204,27 +216,13 @@ def pdf_text(raw: bytes) -> str:
 
 
 # --- PDF patterns ----------------------------------------------------------
-# These are the only part of this script that could not be tested against a real
-# PDF before delivery. If a run reports "could not parse", dump the text with
+# Verified against the week ending 22 November 2026 report on 23 Nov 2026.
+# If a run reports "could not parse", dump the text with
 #     python scripts/update_weekly.py --dry-run --dump-pdf-text
 # and adjust the patterns here. Everything else is layout-independent.
 
 NUM = r"(\d{2,3}\.\d)"
 
-
-# BLOCK A of 3 - paste this over lines 215-280 of scripts/update_weekly.py
-# (from 'def parse_weekly_pdf(text: str) -> dict:' down to and including
-#  the '    return {}' that ends parse_perth_tgp_row, at line 280).
-# Expect the diff to show MORE ADDED than removed, roughly +64 -36.
-# Do not paste anything else here.
-
-def parse_weekly_pdf(text: str) -> dict:
-# REPLACE TO:    the  "    return {}"  that ends parse_perth_tgp_row
-#                (the last line before the blank lines and the
-#                 "# ----" divider that sits above "# fuelplan.gov.au")
-#
-# The two functions are adjacent, so this is a single selection.
-# ===========================================================================
 
 def parse_weekly_pdf(text: str) -> dict:
     out: dict[str, float] = {}
@@ -322,6 +320,36 @@ def parse_perth_tgp_row(text: str) -> dict[str, float]:
     return {}
 
 
+# ---------------------------------------------------------------------------
+# fuelplan.gov.au
+#
+# Why the original patterns all failed (confirmed against the live page on
+# 23 Nov 2026):
+#   - days of cover : the page says "days of COVERAGE", and the figure lives in
+#                     a table, not in prose. The loose fallback
+#                     r"diesel[^.]{0,80}?(\d{1,3})\s*days" matched a stray
+#                     number in the "Ships on water" section and produced
+#                     days_cover = 7.0, which the BOUNDS check rejected.
+#   - ML held       : r"([\d,]{3,6})\s*ML" needs digits immediately before "ML".
+#                     On this page "ML" only ever appears inside parentheses in
+#                     the column headers, e.g. "10 November 2026 (ML)".
+#   - stock-outs    : the table row is labelled "WA (1,002 sites)", not
+#                     "Western Australia" - and that 1,002 is the TOTAL site
+#                     count, not an outage count. The outage numbers are bare
+#                     figures in three columns.
+# All three figures are now read positionally out of their tables, anchored on
+# the section heading, so a stray number elsewhere cannot be picked up. The
+# BOUNDS checks in ok() still apply and are still the backstop.
+# ---------------------------------------------------------------------------
+
+# Which column of the "Retail stock-outs" table counts as "out of diesel".
+# False -> the "Diesel only out" column (matches the existing series).
+# True  -> "Diesel only out" + "Both diesel and petrol out", i.e. every site
+#          with no diesel. This roughly doubles the national figure, so if you
+#          switch it, add a note to the page saying the definition changed.
+WA_OUTAGES_INCLUDE_BOTH = False
+
+
 def _fuelplan_section(t, heading, span=500):
     """Return (text_of_section, offset_in_t) for a bounded window after a heading."""
     m = re.search(heading, t, re.I)
@@ -402,17 +430,27 @@ def parse_fuelplan(html):
     return out
 
 
-
-
 def date_near(text: str, pos: int) -> dt.date | None:
+    """Find the date that labels the figure at `pos`.
+
+    Prefer a date introduced by "as at", because fuelplan's tables are headed
+    "...as at 16 November 2026 (change from 6 November 2026)". Taking the first
+    date in the window can land on the COMPARISON date instead of the real one
+    when the window happens to start between the two.
+    """
     window = text[max(0, pos - 300): pos + 300]
-    m = re.search(r"(\d{1,2})\s+(" + "|".join(MONTHS) + r")\s+(\d{4})", window, re.I)
-    if not m:
-        return None
-    try:
-        return dt.date(int(m.group(3)), MONTHS.index(m.group(2).lower()) + 1, int(m.group(1)))
-    except ValueError:
-        return None
+    month = "|".join(MONTHS)
+    for pat in (r"as at\s+(\d{1,2})\s+(" + month + r")\s+(\d{4})",
+                r"(\d{1,2})\s+(" + month + r")\s+(\d{4})"):
+        m = re.search(pat, window, re.I)
+        if m:
+            try:
+                return dt.date(int(m.group(3)),
+                               MONTHS.index(m.group(2).lower()) + 1,
+                               int(m.group(1)))
+            except ValueError:
+                return None
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -520,12 +558,6 @@ def apply_weekly_report(data: dict, fig: dict, week_ending: dt.date) -> bool:
     iso = week_ending.isoformat()
     if any(r.get("d") == iso for r in data["weekly"]):
         return changed
-
-    # BLOCK B of 3 - goes INSIDE apply_weekly_report(), much further down the file.
-# Paste over the 17 lines from:   if friday is None or "perth_retail" not in fig:
-#                        down to:   the '    }' closing the 'row = {' dict.
-# Expect the diff to show roughly +27 -17.
-# This is NOT the block for line 215.
 
     if friday is None:
         err(f"week ending {iso} not added to the chart: missing Friday TGP")
@@ -639,7 +671,6 @@ def fix_tgp_delta(data: dict, state: dict) -> bool:
     hist[asof] = value
 
     today = dt.date.fromisoformat(asof)
-    target = today - dt.timedelta(days=7)
     # AIP publishes weekdays only, so accept the nearest reading 6-10 days back.
     best, best_gap = None, None
     for iso, v in hist.items():
@@ -688,29 +719,6 @@ def main() -> int:
     changed = False
 
     # --- AIP weekly report ------------------------------------------------
-   # BLOCK C of 3 - inside main(), the "# --- AIP weekly report ---" try block.
-#
-# REPLACE FROM:  the  "    try:"  directly under the line
-#                "    # --- AIP weekly report ----------------------------"
-# REPLACE TO:    the line
-#                "            changed |= apply_weekly_report(data, parse_weekly_pdf(text), week_ending)"
-#
-# That is 27 lines. Do NOT include the "except Exception as exc:" line that
-# follows - it stays exactly where it is.
-#
-# Three things change inside this block:
-#   1. report_url is defined up front, so the --fixtures path cannot raise
-#      NameError when it is checked at the end.
-#   2. state["last_report"] is no longer set the moment the PDF downloads.
-#   3. It is set at the end instead, only if the parse produced no errors.
-#
-# WHY: last_report was recorded before the parse was attempted, so a failed
-# parse burned that week for good - the next run saw "no new weekly report"
-# and the row was never added. That is what happened to week ending
-# 22 November 2026.
-#
-# Expect the diff to show roughly +5 -1.
-
     try:
         report_url = None
         if args.fixtures:
@@ -738,6 +746,9 @@ def main() -> int:
                 return 0
             note(f"parsing weekly report for week ending {week_ending}")
             changed |= apply_weekly_report(data, parse_weekly_pdf(text), week_ending)
+            # Record the report as done ONLY once it has parsed cleanly.
+            # Setting it at download time burned week ending 22 Nov 2026: the
+            # parse failed, but the next run saw "no new weekly report".
             if report_url and not ERRORS:
                 state["last_report"] = report_url
             elif report_url:
