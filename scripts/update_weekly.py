@@ -284,44 +284,114 @@ def parse_perth_tgp_row(text: str) -> dict[str, float]:
 # fuelplan.gov.au
 # ---------------------------------------------------------------------------
 
-def parse_fuelplan(html: str) -> dict:
+# ---------------------------------------------------------------------------
+# REPLACEMENT for parse_fuelplan() in scripts/update_weekly.py
+#
+# In scripts/update_weekly.py, find the line that begins:
+#     def parse_fuelplan(
+# and replace everything from that line down to (but NOT including) the next
+# line that starts with "def " at the left margin. Paste this in its place.
+#
+# Nothing else in the script changes. The keys written to the returned dict
+# are the same ones apply_fuelplan() already reads: days_cover, ml_held,
+# stock_date, wa_outages, nat_outages, outage_date.
+#
+# Why the old version failed (every pattern, confirmed against the live page
+# on 23 Nov 2026):
+#   - days of cover : the page says "days of COVERAGE", and the figure lives in
+#                     a table, not in prose. The loose fallback
+#                     r"diesel[^.]{0,80}?(\d{1,3})\s*days" matched a stray
+#                     number in the "Ships on water" section and produced
+#                     days_cover = 7.0, which the BOUNDS check rejected.
+#   - ML held       : r"([\d,]{3,6})\s*ML" needs digits immediately before "ML".
+#                     On this page "ML" only ever appears inside parentheses in
+#                     the column headers, e.g. "10 November 2026 (ML)", so it
+#                     never matched.
+#   - stock-outs    : the table row is labelled "WA (1,002 sites)", not
+#                     "Western Australia" — and that 1,002 is the TOTAL site
+#                     count, not an outage count. The outage numbers are bare
+#                     figures in three columns.
+#
+# All three figures are now read positionally out of their tables, anchored on
+# the section heading, so a stray number elsewhere on the page cannot be picked
+# up. The BOUNDS checks in ok() still apply and are still the backstop.
+# ---------------------------------------------------------------------------
+
+# Which column of the "Retail stock-outs" table counts as "out of diesel".
+# False -> the "Diesel only out" column (matches the existing series).
+# True  -> "Diesel only out" + "Both diesel and petrol out", i.e. every site
+#          with no diesel. This roughly doubles the national figure, so if you
+#          switch it, add a note to the page saying the definition changed.
+WA_OUTAGES_INCLUDE_BOTH = False
+
+
+def _fuelplan_section(t, heading, span=500):
+    """Return (text_of_section, offset_in_t) for a bounded window after a heading."""
+    m = re.search(heading, t, re.I)
+    if not m:
+        return "", None
+    return t[m.start(): m.start() + span], m.start()
+
+
+def parse_fuelplan(html):
     t = strip_tags(html)
     out: dict = {}
 
-    m = re.search(r"(\d{1,3})\s*days?\s+of\s+(?:diesel\s+)?cover", t, re.I) or \
-        re.search(r"diesel[^.]{0,80}?(\d{1,3})\s*days", t, re.I)
+    # --- Days of cover -----------------------------------------------------
+    # "Days of fuel reserves held under MSO | 10 November 2026 | March quarter
+    #  2026 average" then rows "Petrol 39 37", "Diesel 35 32", "Jet fuel 31 30".
+    # Take the Diesel row's FIRST number (the current date column).
+    sec, at = _fuelplan_section(t, r"Days of fuel reserves held under\s+MSO")
+    m = re.search(r"\bDiesel\b\s+(\d{1,3})\b", sec, re.I) if sec else None
     if m:
         out["days_cover"] = float(m.group(1))
     else:
         err("could not parse days of cover from fuelplan.gov.au")
 
-    m = re.search(r"([\d,]{3,6})\s*ML", t)
+    # --- ML held -----------------------------------------------------------
+    # "Fuel reserves in megalitres (ML) held under the MSO" then rows
+    # "Petrol 1659 1592", "Diesel 3193 2966", "Jet fuel 845 833".
+    sec, at = _fuelplan_section(t, r"reserves in megalitres")
+    m = re.search(r"\bDiesel\b\s+([\d,]{3,6})\b", sec, re.I) if sec else None
     if m:
         out["ml_held"] = float(m.group(1).replace(",", ""))
-        d = date_near(t, m.start())
-        if d:
-            out["stock_date"] = d
+        when = date_near(t, at + m.start())
+        if when:
+            out["stock_date"] = when
     else:
         err("could not parse ML held from fuelplan.gov.au")
 
-    m = re.search(r"Western Australia[^.]{0,120}?(\d{1,3})\s*sites?", t, re.I) or \
-        re.search(r"(\d{1,3})\s*sites?[^.]{0,60}Western Australia", t, re.I)
+    # --- Retail stock-outs -------------------------------------------------
+    # Rows read: "<label> (N sites) <unleaded only> (chg) <diesel only> (chg)
+    #             <both> (chg)". The parenthesised change cells are optional.
+    sec, at = _fuelplan_section(t, r"Retail stock-outs", span=900)
+    row = (r"{}\s*\(\s*[\d,]+\s*sites?\s*\)"
+           r"\s*(\d{{1,4}})(?:\s*\([^)]*\))?"
+           r"\s*(\d{{1,4}})(?:\s*\([^)]*\))?"
+           r"\s*(\d{{1,4}})")
+
+    def _out_of_diesel(match):
+        diesel_only = float(match.group(2))
+        both = float(match.group(3))
+        return diesel_only + both if WA_OUTAGES_INCLUDE_BOTH else diesel_only
+
+    m = re.search(row.format(r"WA"), sec, re.I) if sec else None
     if m:
-        out["wa_outages"] = float(m.group(1))
+        out["wa_outages"] = _out_of_diesel(m)
     else:
         err("could not parse WA diesel stock-outs from fuelplan.gov.au")
 
-    m = re.search(r"(?:nationally|national)[^.]{0,120}?(\d{1,3})\s*sites?", t, re.I) or \
-        re.search(r"(\d{1,3})\s*sites?[^.]{0,60}nationally", t, re.I)
+    m = re.search(row.format(r"Australia"), sec, re.I) if sec else None
     if m:
-        out["nat_outages"] = float(m.group(1))
-        d = date_near(t, m.start())
-        if d:
-            out["outage_date"] = d
+        out["nat_outages"] = _out_of_diesel(m)
+        when = date_near(t, at + m.start())
+        if when:
+            out["outage_date"] = when
     else:
         err("could not parse national diesel stock-outs from fuelplan.gov.au")
 
     return out
+
 
 
 def date_near(text: str, pos: int) -> dt.date | None:
