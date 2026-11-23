@@ -1,0 +1,85 @@
+# .github/workflows/weekly.yml
+#
+# Runs scripts/update_weekly.py, which has existed since 28 Oct 2026 but has
+# never been executed: update.yml only runs update_page.py and only commits
+# index.html + state.json.
+#
+# update_weekly.py owns:
+#   - tiles.price[2] national average retail diesel  (AIP weekly report PDF)
+#   - tiles.price[3] Singapore gasoil 10ppm          (same PDF)
+#   - tiles.stock[0] days of cover, tiles.stock[2] WA outages (fuelplan.gov.au)
+#   - new rows in weekly[]
+#   - the corrected terminal gate "over the week" delta, from a dated
+#     tgp_history in scripts/state_weekly.json
+#
+# It reads the asof that update_page.py wrote into index.html, so it must run
+# AFTER that script has committed. This workflow is scheduled 15 minutes later
+# and checks out the pushed result.
+
+name: Update weekly diesel figures
+
+on:
+  schedule:
+    # 07:45 UTC = 3:45pm Perth, weekdays — 15 min after update.yml (07:30 UTC).
+    - cron: '45 7 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diesel-watch-update      # same group as update.yml, so they queue
+  cancel-in-progress: false
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pdfplumber requests
+
+      - name: Refresh the weekly figures
+        id: refresh
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/update_weekly.py | tee weekly.log || echo "code=1" >> "$GITHUB_OUTPUT"
+          echo "summary=$(grep -m1 '^SUMMARY:' weekly.log | cut -c10- || echo 'Weekly figures refresh')" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and publish
+        shell: bash
+        run: |
+          if [ -z "$(git status --porcelain index.html scripts/state_weekly.json)" ]; then
+            echo "No change — nothing to publish."
+            exit 0
+          fi
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html scripts/state_weekly.json
+          git commit -m "${{ steps.refresh.outputs.summary || 'Weekly figures refresh' }}"
+          # update.yml may have pushed between our checkout and now.
+          git pull --rebase --autostash
+          git push
+
+      - name: Keep the fetched sources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-sources
+          path: |
+            debug/
+            weekly.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Fail if a source has broken
+        if: steps.refresh.outputs.code == '1'
+        run: |
+          echo "update_weekly.py reported a broken source — see the weekly-sources artifact."
+          exit 1
