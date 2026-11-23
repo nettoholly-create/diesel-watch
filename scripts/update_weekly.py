@@ -364,24 +364,36 @@ def parse_fuelplan(html):
     # --- Retail stock-outs -------------------------------------------------
     # Rows read: "<label> (N sites) <unleaded only> (chg) <diesel only> (chg)
     #             <both> (chg)". The parenthesised change cells are optional.
-    sec, at = _fuelplan_section(t, r"Retail stock-outs", span=900)
-    row = (r"{}\s*\(\s*[\d,]+\s*sites?\s*\)"
-           r"\s*(\d{{1,4}})(?:\s*\([^)]*\))?"
-           r"\s*(\d{{1,4}})(?:\s*\([^)]*\))?"
-           r"\s*(\d{{1,4}})")
+    #
+    # The label is anchored deliberately. A bare r"Australia" also matches
+    # INSIDE "South Australia", so if fuelplan ever spells the states out in
+    # full, the national row silently picks up SA's figure instead - a
+    # plausible-looking number that no range check would ever catch. The
+    # lookbehinds make that impossible, and the alternation means a WA row
+    # labelled either "WA" or "Western Australia" is read correctly.
+    #
+    # span is 2000, not 900: the table has a row per state and WA sits near
+    # the bottom, so a tight window can run out before reaching it.
+    sec, at = _fuelplan_section(t, r"Retail stock-outs", span=2000)
+    _TAIL = (r"\s*\(\s*[\d,]+\s*sites?\s*\)"
+             r"\s*(\d{1,4})(?:\s*\([^)]*\))?"
+             r"\s*(\d{1,4})(?:\s*\([^)]*\))?"
+             r"\s*(\d{1,4})")
+    WA_ROW = r"(?<!\w)(?:Western Australia|WA)" + _TAIL
+    NAT_ROW = r"(?<!South )(?<!Western )(?<!\w)Australia" + _TAIL
 
     def _out_of_diesel(match):
         diesel_only = float(match.group(2))
         both = float(match.group(3))
         return diesel_only + both if WA_OUTAGES_INCLUDE_BOTH else diesel_only
 
-    m = re.search(row.format(r"WA"), sec, re.I) if sec else None
+    m = re.search(WA_ROW, sec, re.I) if sec else None
     if m:
         out["wa_outages"] = _out_of_diesel(m)
     else:
         err("could not parse WA diesel stock-outs from fuelplan.gov.au")
 
-    m = re.search(row.format(r"Australia"), sec, re.I) if sec else None
+    m = re.search(NAT_ROW, sec, re.I) if sec else None
     if m:
         out["nat_outages"] = _out_of_diesel(m)
         when = date_near(t, at + m.start())
@@ -391,6 +403,7 @@ def parse_fuelplan(html):
         err("could not parse national diesel stock-outs from fuelplan.gov.au")
 
     return out
+
 
 
 
