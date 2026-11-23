@@ -212,72 +212,114 @@ def pdf_text(raw: bytes) -> str:
 NUM = r"(\d{2,3}\.\d)"
 
 
- if friday is None:
-        err(f"week ending {iso} not added to the chart: missing Friday TGP")
-        return changed
+# BLOCK A of 3 - paste this over lines 215-280 of scripts/update_weekly.py
+# (from 'def parse_weekly_pdf(text: str) -> dict:' down to and including
+#  the '    return {}' that ends parse_perth_tgp_row, at line 280).
+# Expect the diff to show MORE ADDED than removed, roughly +64 -36.
+# Do not paste anything else here.
 
-    prev_rows = [r for r in data["weekly"] if r.get("gas") is not None]
-    prev_tgp = prev_rows[-1]["tgp"] if prev_rows else None
-    prev_pump = prev_rows[-1]["pump"] if prev_rows else None
-    if not ok("perth_tgp", friday, prev_tgp):
-        return changed
+def parse_weekly_pdf(text: str) -> dict:
+# REPLACE TO:    the  "    return {}"  that ends parse_perth_tgp_row
+#                (the last line before the blank lines and the
+#                 "# ----" divider that sits above "# fuelplan.gov.au")
+#
+# The two functions are adjacent, so this is a single selection.
+# ===========================================================================
 
-    # Perth retail and gasoil are not in the current report layout. Record the
-    # row with the TGP we do have rather than dropping the week entirely; the
-    # chart already handles a row with nulls.
-    pump = None
-    if "perth_retail" in fig and ok("perth_retail", fig["perth_retail"], prev_pump):
-        pump = round(fig["perth_retail"], 1)
-    if pump is None:
-        note(f"week ending {iso}: no Perth retail price in the report, "
-             f"row added with TGP only")
+def parse_weekly_pdf(text: str) -> dict:
+    out: dict[str, float] = {}
+    low = text.lower()
 
-    row = {
-        "d": iso,
-        "label": f"{week_ending.day} {week_ending.strftime('%b')}",
-        "tgp": round(friday, 1),
-        "pump": pump,
-        "gas": round(fig["gasoil"], 1) if "gasoil" in fig else None,
+    # Present in the PDF as running text near the top of page 2.
+    pat_national = [
+        r"average\s+diesel\s+retail\s+price\s+this\s+week[^0-9]{0,20}" + NUM,
+        r"national\s+average\s+(?:retail\s+)?diesel[^0-9]{0,80}" + NUM,
+        r"average\s+retail\s+diesel\s+price[^0-9]{0,80}" + NUM,
+    ]
+    for p in pat_national:
+        m = re.search(p, low)
+        if m:
+            out["national_retail"] = float(m.group(1))
+            break
+    else:
+        err("could not parse national_retail from the weekly report PDF")
+
+    # OPTIONAL. Neither survives text extraction from the current report
+    # layout: gasoil is drawn only inside chart images, and the retail price
+    # table is rotated text. The patterns are kept in case AIP republishes
+    # them as text, but a miss is NOT an error - the field is just absent.
+    pat_optional = {
+        "gasoil": [
+            r"(?:singapore\s+)?gasoil\s*\(?10\s*ppm\)?[^0-9]{0,120}" + NUM,
+        ],
+        "perth_retail": [
+            r"perth[^\n]{0,60}?average[^0-9]{0,40}" + NUM,
+        ],
     }
+    for key, pats in pat_optional.items():
+        for p in pats:
+            m = re.search(p, low)
+            if m:
+                out[key] = float(m.group(1))
+                break
+
+    tgp = parse_perth_tgp_row(text)
+    if tgp:
+        out["perth_tgp_daily"] = tgp
+    else:
+        err("could not parse the daily Perth TGP table from the weekly report PDF")
+    return out
 
 
-# ---------------------------------------------------------------------------
-# fuelplan.gov.au
-# ---------------------------------------------------------------------------
+def parse_perth_tgp_row(text: str) -> dict[str, float]:
+    """Pull the daily Perth TGP row (five weekday values) out of the report.
 
-# ---------------------------------------------------------------------------
+    Returns {iso date: value}. The Friday value is what a weekly row records.
 
-# Nothing else in the script changes. The keys written to the returned dict
-# are the same ones apply_fuelplan() already reads: days_cover, ml_held,
-# stock_date, wa_outages, nat_outages, outage_date.
-#
-# Why the old version failed (every pattern, confirmed against the live page
-# on 23 Nov 2026):
-#   - days of cover : the page says "days of COVERAGE", and the figure lives in
-#                     a table, not in prose. The loose fallback
-#                     r"diesel[^.]{0,80}?(\d{1,3})\s*days" matched a stray
-#                     number in the "Ships on water" section and produced
-#                     days_cover = 7.0, which the BOUNDS check rejected.
-#   - ML held       : r"([\d,]{3,6})\s*ML" needs digits immediately before "ML".
-#                     On this page "ML" only ever appears inside parentheses in
-#                     the column headers, e.g. "10 November 2026 (ML)", so it
-#                     never matched.
-#   - stock-outs    : the table row is labelled "WA (1,002 sites)", not
-#                     "Western Australia" — and that 1,002 is the TOTAL site
-#                     count, not an outage count. The outage numbers are bare
-#                     figures in three columns.
-#
-# All three figures are now read positionally out of their tables, anchored on
-# the section heading, so a stray number elsewhere on the page cannot be picked
-# up. The BOUNDS checks in ok() still apply and are still the backstop.
-# ---------------------------------------------------------------------------
+    The header row of that table reads "16 November 2026 17 November 2026 ..."
+    The original code only looked for dd/mm/yy dates, which this report does
+    not use anywhere, so the table was never found. Both layouts are accepted
+    now, the written-out form first.
+    """
+    dates: list[dt.date] = []
+    month = "|".join(MONTHS)
 
-# Which column of the "Retail stock-outs" table counts as "out of diesel".
-# False -> the "Diesel only out" column (matches the existing series).
-# True  -> "Diesel only out" + "Both diesel and petrol out", i.e. every site
-#          with no diesel. This roughly doubles the national figure, so if you
-#          switch it, add a note to the page saying the definition changed.
-WA_OUTAGES_INCLUDE_BOTH = False
+    for line in text.splitlines():
+        found = re.findall(r"(\d{1,2})\s+(" + month + r")\s+(\d{4})", line, re.I)
+        if len(found) >= 5:
+            try:
+                dates = [dt.date(int(y), MONTHS.index(mo.lower()) + 1, int(d))
+                         for d, mo, y in found[:5]]
+            except ValueError:
+                dates = []
+            if dates:
+                break
+
+    if not dates:
+        for line in text.splitlines():
+            found = re.findall(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", line)
+            if len(found) >= 5:
+                try:
+                    dates = [
+                        dt.date(2000 + int(y) if len(y) == 2 else int(y),
+                                int(mo), int(d))
+                        for d, mo, y in found[:5]
+                    ]
+                except ValueError:
+                    dates = []
+                if dates:
+                    break
+
+    if not dates:
+        return {}
+
+    for line in text.splitlines():
+        if not re.match(r"\s*perth\b", line, re.I):
+            continue
+        vals = re.findall(NUM, line)
+        if len(vals) >= 5:
+            return {d.isoformat(): float(v) for d, v in zip(dates, vals[:5])}
+    return {}
 
 
 def _fuelplan_section(t, heading, span=500):
