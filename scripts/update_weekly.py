@@ -521,22 +521,37 @@ def apply_weekly_report(data: dict, fig: dict, week_ending: dt.date) -> bool:
     if any(r.get("d") == iso for r in data["weekly"]):
         return changed
 
-    if friday is None or "perth_retail" not in fig:
-        err(f"week ending {iso} not added to the chart: missing "
-            f"{'Friday TGP' if friday is None else 'Perth retail'}")
+    # BLOCK B of 3 - goes INSIDE apply_weekly_report(), much further down the file.
+# Paste over the 17 lines from:   if friday is None or "perth_retail" not in fig:
+#                        down to:   the '    }' closing the 'row = {' dict.
+# Expect the diff to show roughly +27 -17.
+# This is NOT the block for line 215.
+
+    if friday is None:
+        err(f"week ending {iso} not added to the chart: missing Friday TGP")
         return changed
 
     prev_rows = [r for r in data["weekly"] if r.get("gas") is not None]
     prev_tgp = prev_rows[-1]["tgp"] if prev_rows else None
     prev_pump = prev_rows[-1]["pump"] if prev_rows else None
-    if not ok("perth_tgp", friday, prev_tgp) or not ok("perth_retail", fig["perth_retail"], prev_pump):
+    if not ok("perth_tgp", friday, prev_tgp):
         return changed
+
+    # Perth retail and gasoil are not in the current report layout. Record the
+    # row with the TGP we do have rather than dropping the week entirely; the
+    # chart already handles a row with nulls.
+    pump = None
+    if "perth_retail" in fig and ok("perth_retail", fig["perth_retail"], prev_pump):
+        pump = round(fig["perth_retail"], 1)
+    if pump is None:
+        note(f"week ending {iso}: no Perth retail price in the report, "
+             f"row added with TGP only")
 
     row = {
         "d": iso,
         "label": f"{week_ending.day} {week_ending.strftime('%b')}",
         "tgp": round(friday, 1),
-        "pump": round(fig["perth_retail"], 1),
+        "pump": pump,
         "gas": round(fig["gasoil"], 1) if "gasoil" in fig else None,
     }
 
