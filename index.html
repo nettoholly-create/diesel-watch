@@ -508,7 +508,312 @@
 }
 </script>
 <script>
+(function(){
+  "use strict";
 
+  var DATA = JSON.parse(document.getElementById("dw-data").textContent);
+  var weekly = DATA.weekly;
+  var towns = DATA.towns;
+  var regions = DATA.regions;
+  var ASOF = DATA.asof;
+  var NS = "http://www.w3.org/2000/svg";
+
+  document.getElementById("asof").textContent =
+    "Pump prices as at " + fmtDate(ASOF) + " · bulk benchmark " + DATA.benchDate;
+
+  renderTiles("priceTiles", DATA.tiles.price);
+  renderTiles("stockTiles", DATA.tiles.stock);
+
+  function renderTiles(hostId, items){
+    var host = document.getElementById(hostId);
+    if (!host || !items) return;
+    items.forEach(function(t){
+      var tile = document.createElement("div");
+      tile.className = "tile";
+      var lab = document.createElement("div");
+      lab.className = "lab";
+      lab.appendChild(document.createTextNode(t.lab));
+      if (t.lab2){
+        lab.appendChild(document.createElement("br"));
+        lab.appendChild(document.createTextNode(t.lab2));
+      }
+      tile.appendChild(lab);
+      var val = document.createElement("div");
+      val.className = "val";
+      val.appendChild(document.createTextNode(t.val + " "));
+      var unit = document.createElement("span");
+      unit.textContent = t.unit;
+      val.appendChild(unit);
+      tile.appendChild(val);
+      if (t.delta){
+        var d = document.createElement("div");
+        d.className = "delta";
+        var b = document.createElement("b");
+        b.textContent = (t.delta.dir === "down" ? "▼ " : "▲ ") + t.delta.amount;
+        d.appendChild(b);
+        d.appendChild(document.createTextNode(" " + t.delta.text));
+        tile.appendChild(d);
+      } else if (t.note){
+        var nt = document.createElement("div");
+        nt.className = "note";
+        nt.textContent = t.note;
+        tile.appendChild(nt);
+      }
+      host.appendChild(tile);
+    });
+  }
+
+  function fmtDate(iso){
+    var m = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    var p = iso.split("-");
+    return parseInt(p[2],10) + " " + m[parseInt(p[1],10)-1] + " " + p[0];
+  }
+  function el(tag, attrs){
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function t(x){ return new Date(x + "T00:00:00").getTime(); }
+
+  /* Axis domains are derived from the data, never hardcoded. A fixed domain
+     silently pushes marks outside the plot once prices move past it - that is
+     what put the town names under the connector lines when diesel fell below
+     the old 255 floor. */
+  function niceDomain(lo, hi, padFrac, snap){
+    var span = (hi - lo) || 1;
+    var pad = Math.max(span * padFrac, 2);
+    return [Math.floor((lo - pad) / snap) * snap,
+            Math.ceil((hi + pad) / snap) * snap];
+  }
+  function niceStep(span, maxLines){
+    var steps = [5, 10, 20, 40, 50, 100, 200];
+    for (var i = 0; i < steps.length; i++){
+      if (span / steps[i] <= maxLines) return steps[i];
+    }
+    return steps[steps.length - 1];
+  }
+
+  /* ---------- line chart ---------- */
+  (function(){
+    var svg = document.getElementById("lineChart"),
+        tip = document.getElementById("tipLine"),
+        W = 900, H = 340,
+        L = 46, R = 74, T = 30, B = 34,
+        pw = W - L - R, ph = H - T - B;
+
+    var xs = weekly.map(function(r){ return t(r.d); });
+    var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+
+    var series = [
+      {key:"tgp",  color:"var(--s1)", name:"Perth terminal gate", short:"bulk"},
+      {key:"pump", color:"var(--s2)", name:"Perth average pump",  short:"pump"},
+      {key:"gas",  color:"var(--s3)", name:"Singapore gasoil",    short:"gasoil"}
+    ];
+
+    var vals = [];
+    weekly.forEach(function(r){
+      series.forEach(function(s){ if (r[s.key] !== null) vals.push(r[s.key]); });
+    });
+    var dom = niceDomain(Math.min.apply(null, vals), Math.max.apply(null, vals), 0.08, 20);
+    var yMin = dom[0], yMax = dom[1];
+    var yStep = niceStep(yMax - yMin, 8);
+
+    function X(d){ return L + (t(d) - x0) / (x1 - x0) * pw; }
+    function Y(v){ return T + (yMax - v) / (yMax - yMin) * ph; }
+
+    for (var v = yMin; v <= yMax; v += yStep){
+      svg.appendChild(el("line", {class:"gl", x1:L, x2:L+pw, y1:Y(v), y2:Y(v)}));
+      var tk = el("text", {class:"tick", x:L-8, y:Y(v)+3.5, "text-anchor":"end"});
+      tk.textContent = v; svg.appendChild(tk);
+    }
+    var yl = el("text", {class:"tick", x:L-8, y:T-14, "text-anchor":"end"});
+    yl.textContent = "c/L"; svg.appendChild(yl);
+    svg.appendChild(el("line", {class:"ax", x1:L, x2:L+pw, y1:Y(yMin), y2:Y(yMin)}));
+
+    /* Date ticks, thinned so they cannot overlap. The final point is always
+       labelled: when a weekly row lands a day or two before the live daily
+       point, the earlier label is dropped rather than printed on top of it. */
+    var MINGAP = 36, drawn = [];
+    weekly.forEach(function(r, i){
+      var x = X(r.d), isLast = (i === weekly.length - 1);
+      if (!isLast && drawn.length && x - drawn[drawn.length-1].x < MINGAP) return;
+      if (isLast){
+        while (drawn.length && x - drawn[drawn.length-1].x < MINGAP){
+          svg.removeChild(drawn.pop().node);
+        }
+      }
+      var tx = el("text", {class:"tick", x:x, y:H-12, "text-anchor":"middle"});
+      tx.textContent = r.label;
+      svg.appendChild(tx);
+      drawn.push({x:x, node:tx});
+    });
+
+    series.forEach(function(s){
+      var pts = weekly.filter(function(r){ return r[s.key] !== null; });
+      if (!pts.length) return;
+      var d = pts.map(function(r,i){ return (i?"L":"M") + X(r.d).toFixed(1) + " " + Y(r[s.key]).toFixed(1); }).join(" ");
+      svg.appendChild(el("path", {d:d, fill:"none", stroke:s.color, "stroke-width":2,
+                                  "stroke-linejoin":"round", "stroke-linecap":"round"}));
+      pts.forEach(function(r){
+        svg.appendChild(el("circle", {cx:X(r.d), cy:Y(r[s.key]), r:4.5, fill:s.color,
+                                      stroke:"var(--surface-1)", "stroke-width":2}));
+      });
+      /* A series that stops short of the right edge gets its label up and to
+         the left, so it does not sit on top of a line still running past it. */
+      var last = pts[pts.length-1];
+      var left = (L + pw) - X(last.d) > 46;
+      var dx = left ? -10 : 10, dy = left ? -22 : 4;
+      var lab = el("text", {class:"endlab", x:X(last.d)+dx, y:Y(last[s.key])+dy, fill:s.color,
+                            "text-anchor": left ? "end" : "start"});
+      lab.textContent = last[s.key].toFixed(1);
+      svg.appendChild(lab);
+      var nm = el("text", {class:"tick", x:X(last.d)+dx, y:Y(last[s.key])+dy+13,
+                           "text-anchor": left ? "end" : "start"});
+      nm.textContent = s.short;
+      svg.appendChild(nm);
+    });
+
+    var hairline = el("line", {class:"ax", x1:0, x2:0, y1:T, y2:T+ph, opacity:0});
+    svg.appendChild(hairline);
+
+    svg.addEventListener("mousemove", onMove);
+    svg.addEventListener("mouseleave", function(){ tip.style.opacity = 0; hairline.setAttribute("opacity", 0); });
+    svg.addEventListener("touchstart", onMove, {passive:true});
+    svg.addEventListener("touchmove", onMove, {passive:true});
+
+    function onMove(ev){
+      var rect = svg.getBoundingClientRect();
+      var cx = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
+      var ratio = W / rect.width;
+      var vx = cx * ratio;
+      var best = null, bd = 1e9, bi = -1;
+      weekly.forEach(function(r, i){
+        var dd = Math.abs(X(r.d) - vx);
+        if (dd < bd){ bd = dd; best = r; bi = i; }
+      });
+      if (!best) return;
+      hairline.setAttribute("x1", X(best.d)); hairline.setAttribute("x2", X(best.d));
+      hairline.setAttribute("opacity", 1);
+      var rows = series.filter(function(s){ return best[s.key] !== null; }).map(function(s){
+        return '<div class="r"><i class="d" style="background:' + s.color + '"></i>' +
+               s.name + ' <b>' + best[s.key].toFixed(1) + '</b></div>';
+      }).join("");
+      /* The last row is the live daily point; every other row is a week ending. */
+      var head = (bi === weekly.length - 1) ? best.label : "Week ending " + best.label;
+      tip.innerHTML = '<b>' + head + '</b>' + rows;
+      tip.style.left = (X(best.d) / ratio) + "px";
+      tip.style.top  = (T + ph * 0.32) + "px";
+      tip.style.opacity = 1;
+    }
+  })();
+
+  /* ---------- dumbbell by town ---------- */
+  (function(){
+    var svg = document.getElementById("townChart"),
+        tip = document.getElementById("tipTown"),
+        W = 900, H = 436,
+        L = 152, R = 58, T = 26, B = 30,
+        pw = W - L - R, ph = H - T - B;
+
+    var lows = towns.map(function(r){ return r.low; });
+    var highs = towns.map(function(r){ return r.high; });
+    var dom = niceDomain(Math.min.apply(null, lows), Math.max.apply(null, highs), 0.09, 10);
+    var xMin = dom[0], xMax = dom[1];
+    var xStep = niceStep(xMax - xMin, 8);
+
+    function X(v){ return L + (v - xMin) / (xMax - xMin) * pw; }
+    var step = ph / towns.length;
+
+    for (var v = xMin; v <= xMax; v += xStep){
+      svg.appendChild(el("line", {class:"gl", x1:X(v), x2:X(v), y1:T-6, y2:T+ph}));
+      var tk = el("text", {class:"tick", x:X(v), y:T-12, "text-anchor":"middle"});
+      tk.textContent = v; svg.appendChild(tk);
+    }
+    /* Clear of the first gridline label, which now sits at the plot's left
+       edge because the domain starts at the data rather than at a fixed 255. */
+    var unit = el("text", {class:"tick", x:L-30, y:T-12, "text-anchor":"end"});
+    unit.textContent = "c/L"; svg.appendChild(unit);
+
+    towns.forEach(function(r, i){
+      var y = T + step * i + step/2;
+
+      var nm = el("text", {class:"townlab", x:L-14, y:y+4, "text-anchor":"end"});
+      nm.textContent = r.name; svg.appendChild(nm);
+
+      svg.appendChild(el("line", {x1:X(r.low), x2:X(r.high), y1:y, y2:y,
+                                  stroke:"var(--axis)", "stroke-width":2, "stroke-linecap":"round"}));
+      svg.appendChild(el("circle", {cx:X(r.high), cy:y, r:5.5, fill:"var(--surface-1)",
+                                    stroke:"var(--axis)", "stroke-width":2}));
+      svg.appendChild(el("circle", {cx:X(r.low), cy:y, r:5.5, fill:"var(--s1)",
+                                    stroke:"var(--surface-1)", "stroke-width":2}));
+
+      var lo = el("text", {class:"barlab", x:X(r.low)-11, y:y+4, "text-anchor":"end"});
+      lo.textContent = r.low.toFixed(1); svg.appendChild(lo);
+      var hi = el("text", {class:"barlab", x:X(r.high)+11, y:y+4});
+      hi.textContent = r.high.toFixed(1); svg.appendChild(hi);
+
+      var hit = el("rect", {x:L-150, y:y-step/2, width:pw+150, height:step, fill:"transparent"});
+      hit.addEventListener("mouseenter", function(){
+        tip.innerHTML = '<b>' + r.name + '</b>' +
+          '<div class="r"><i class="d" style="background:var(--s1)"></i>Cheapest <b>' + r.low.toFixed(1) + '</b></div>' +
+          '<div class="r"><i class="d" style="background:var(--axis)"></i>Dearest <b>' + r.high.toFixed(1) + '</b></div>' +
+          '<div class="r">Spread ' + (r.high - r.low).toFixed(1) + ' c/L across ' + r.n + ' site' + (r.n>1?'s':'') + '</div>';
+        var rect = svg.getBoundingClientRect(), ratio = W / rect.width;
+        tip.style.left = (X((r.low + r.high)/2) / ratio) + "px";
+        tip.style.top  = (y / ratio + 6) + "px";
+        tip.style.opacity = 1;
+      });
+      hit.addEventListener("mouseleave", function(){ tip.style.opacity = 0; });
+      svg.appendChild(hit);
+    });
+  })();
+
+  /* ---------- region table ---------- */
+  (function(){
+    var body = document.getElementById("tbR");
+    regions.forEach(function(r){
+      var tr = document.createElement("tr");
+      var res = r.reserve
+        ? '<span class="res"><i></i>' + r.reserve + '</span>'
+        : '<span class="res none"><i></i>None held here</span>';
+      var rep = r.report
+        ? '<span class="rep">' + r.report + '</span>'
+        : '<span class="rep">No reports this week</span>';
+      tr.innerHTML =
+        '<td class="rname">' + r.name + '<span class="centres">' + r.centres + '</span></td>' +
+        '<td>' + r.sites + '</td>' +
+        '<td>' + r.low.toFixed(1) + '</td>' +
+        '<td>' + r.high.toFixed(1) + '</td>' +
+        '<td>' + res + '</td>' +
+        '<td>' + rep + '</td>';
+      body.appendChild(tr);
+    });
+  })();
+
+  /* ---------- table view ---------- */
+  (function(){
+    var bw = document.getElementById("tbW"), bt = document.getElementById("tbT");
+    weekly.forEach(function(r){
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + r.label + " 2026</td><td>" + r.tgp.toFixed(1) + "</td><td>" +
+        (r.pump === null ? "—" : r.pump.toFixed(1)) + "</td><td>" +
+        (r.gas === null ? "—" : r.gas.toFixed(1)) + "</td>";
+      bw.appendChild(tr);
+    });
+    towns.forEach(function(r){
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + r.name + "</td><td>" + r.low.toFixed(1) + "</td><td>" + r.high.toFixed(1) +
+        "</td><td>" + (r.high - r.low).toFixed(1) + "</td><td>" + r.n + "</td>";
+      bt.appendChild(tr);
+    });
+    var btn = document.getElementById("tblBtn"), box = document.getElementById("tables");
+    btn.addEventListener("click", function(){
+      var open = box.classList.toggle("hidden") === false;
+      btn.textContent = open ? "Hide the numbers" : "Show the numbers";
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  })();
+})();
 </script>
 </body>
 </html>
