@@ -212,72 +212,33 @@ def pdf_text(raw: bytes) -> str:
 NUM = r"(\d{2,3}\.\d)"
 
 
-def parse_weekly_pdf(text: str) -> dict:
-    out: dict[str, float] = {}
-    low = text.lower()
+ if friday is None:
+        err(f"week ending {iso} not added to the chart: missing Friday TGP")
+        return changed
 
-    pat_national = [
-        r"national\s+average\s+(?:retail\s+)?diesel[^0-9]{0,80}" + NUM,
-        r"average\s+retail\s+diesel\s+price[^0-9]{0,80}" + NUM,
-    ]
-    pat_gasoil = [
-        r"(?:singapore\s+)?gasoil\s*\(?10\s*ppm\)?[^0-9]{0,120}" + NUM,
-        r"gasoil[^0-9]{0,120}" + NUM,
-    ]
-    pat_perth_retail = [
-        r"perth[^\n]{0,60}?average[^0-9]{0,40}" + NUM,
-        r"perth\s+" + NUM + r"\s",
-    ]
+    prev_rows = [r for r in data["weekly"] if r.get("gas") is not None]
+    prev_tgp = prev_rows[-1]["tgp"] if prev_rows else None
+    prev_pump = prev_rows[-1]["pump"] if prev_rows else None
+    if not ok("perth_tgp", friday, prev_tgp):
+        return changed
 
-    for key, pats in (
-        ("national_retail", pat_national),
-        ("gasoil", pat_gasoil),
-        ("perth_retail", pat_perth_retail),
-    ):
-        for p in pats:
-            m = re.search(p, low)
-            if m:
-                out[key] = float(m.group(1))
-                break
-        else:
-            err(f"could not parse {key} from the weekly report PDF")
+    # Perth retail and gasoil are not in the current report layout. Record the
+    # row with the TGP we do have rather than dropping the week entirely; the
+    # chart already handles a row with nulls.
+    pump = None
+    if "perth_retail" in fig and ok("perth_retail", fig["perth_retail"], prev_pump):
+        pump = round(fig["perth_retail"], 1)
+    if pump is None:
+        note(f"week ending {iso}: no Perth retail price in the report, "
+             f"row added with TGP only")
 
-    tgp = parse_perth_tgp_row(text)
-    if tgp:
-        out["perth_tgp_daily"] = tgp
-    else:
-        err("could not parse the daily Perth TGP table from the weekly report PDF")
-    return out
-
-
-def parse_perth_tgp_row(text: str) -> dict[str, float]:
-    """Pull the daily Perth TGP row (five weekday values) out of the report.
-
-    Returns {iso date: value}. The Friday value is what a weekly row records.
-    """
-    dates: list[dt.date] = []
-    for line in text.splitlines():
-        found = re.findall(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", line)
-        if len(found) >= 5:
-            try:
-                dates = [
-                    dt.date(2000 + int(y) if len(y) == 2 else int(y), int(mo), int(d))
-                    for d, mo, y in found[:5]
-                ]
-            except ValueError:
-                dates = []
-            if dates:
-                break
-    if not dates:
-        return {}
-
-    for line in text.splitlines():
-        if not re.match(r"\s*perth\b", line, re.I):
-            continue
-        vals = re.findall(NUM, line)
-        if len(vals) >= 5:
-            return {d.isoformat(): float(v) for d, v in zip(dates, vals[:5])}
-    return {}
+    row = {
+        "d": iso,
+        "label": f"{week_ending.day} {week_ending.strftime('%b')}",
+        "tgp": round(friday, 1),
+        "pump": pump,
+        "gas": round(fig["gasoil"], 1) if "gasoil" in fig else None,
+    }
 
 
 # ---------------------------------------------------------------------------
