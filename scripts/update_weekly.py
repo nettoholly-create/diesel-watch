@@ -688,7 +688,31 @@ def main() -> int:
     changed = False
 
     # --- AIP weekly report ------------------------------------------------
+   # BLOCK C of 3 - inside main(), the "# --- AIP weekly report ---" try block.
+#
+# REPLACE FROM:  the  "    try:"  directly under the line
+#                "    # --- AIP weekly report ----------------------------"
+# REPLACE TO:    the line
+#                "            changed |= apply_weekly_report(data, parse_weekly_pdf(text), week_ending)"
+#
+# That is 27 lines. Do NOT include the "except Exception as exc:" line that
+# follows - it stays exactly where it is.
+#
+# Three things change inside this block:
+#   1. report_url is defined up front, so the --fixtures path cannot raise
+#      NameError when it is checked at the end.
+#   2. state["last_report"] is no longer set the moment the PDF downloads.
+#   3. It is set at the end instead, only if the parse produced no errors.
+#
+# WHY: last_report was recorded before the parse was attempted, so a failed
+# parse burned that week for good - the next run saw "no new weekly report"
+# and the row was never added. That is what happened to week ending
+# 22 November 2026.
+#
+# Expect the diff to show roughly +5 -1.
+
     try:
+        report_url = None
         if args.fixtures:
             with open(os.path.join(args.fixtures, "report.pdf"), "rb") as f:
                 raw = f.read()
@@ -702,7 +726,6 @@ def main() -> int:
                 raw = None
             else:
                 raw = fetch(find_pdf_url(fetch(report_url)), binary=True)
-                state["last_report"] = report_url
 
         if raw is not None:
             if args.save_fixtures:
@@ -715,6 +738,10 @@ def main() -> int:
                 return 0
             note(f"parsing weekly report for week ending {week_ending}")
             changed |= apply_weekly_report(data, parse_weekly_pdf(text), week_ending)
+            if report_url and not ERRORS:
+                state["last_report"] = report_url
+            elif report_url:
+                note(f"week ending {week_ending} had problems; retrying next run")
     except Exception as exc:  # noqa: BLE001
         err(f"weekly report step failed: {exc}")
 
