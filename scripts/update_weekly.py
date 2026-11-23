@@ -285,13 +285,7 @@ def parse_perth_tgp_row(text: str) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# REPLACEMENT for parse_fuelplan() in scripts/update_weekly.py
-#
-# In scripts/update_weekly.py, find the line that begins:
-#     def parse_fuelplan(
-# and replace everything from that line down to (but NOT including) the next
-# line that starts with "def " at the left margin. Paste this in its place.
-#
+
 # Nothing else in the script changes. The keys written to the returned dict
 # are the same ones apply_fuelplan() already reads: days_cover, ml_held,
 # stock_date, wa_outages, nat_outages, outage_date.
