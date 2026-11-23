@@ -1,0 +1,100 @@
+# .github/workflows/watchdog.yml
+#
+# The staleness alarm, moved into the repo so it no longer depends on anything
+# outside GitHub. It reads the asof date out of the dw-data block in
+# index.html and fails the run if the page has gone stale.
+#
+# A failed scheduled run emails the repo owner, so this is self-alerting: no
+# fetching, no parsing of AIP, no permission gates, nothing to go stale on its
+# own. It is the 7-27 October outage detector.
+#
+# Note: GitHub disables scheduled workflows after 60 days with no repo
+# activity. This repo commits every weekday, so that will not bite while the
+# Action is healthy — and if the Action stops committing, this workflow
+# catching it is exactly the point.
+
+name: Diesel watch staleness watchdog
+
+on:
+  schedule:
+    # 08:15 UTC = 4:15pm Perth, weekdays — 45 min after update.yml, 30 after weekly.yml.
+    - cron: '15 8 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the page is fresh
+        shell: python
+        run: |
+          import datetime, json, os, re, sys
+
+          MAX_WEEKDAYS_BEHIND = 2
+
+          html = open("index.html", encoding="utf-8").read()
+          m = re.search(
+              r'<script id="dw-data"[^>]*>(.*?)</script>', html, re.S
+          )
+          if not m:
+              sys.exit("FAIL: no dw-data block found in index.html.")
+
+          try:
+              data = json.loads(m.group(1))
+          except json.JSONDecodeError as e:
+              sys.exit(f"FAIL: dw-data block is not valid JSON: {e}")
+
+          asof_raw = data.get("asof")
+          if not asof_raw:
+              sys.exit("FAIL: dw-data has no asof field.")
+
+          try:
+              asof = datetime.date.fromisoformat(asof_raw)
+          except ValueError:
+              sys.exit(f"FAIL: asof is not an ISO date: {asof_raw!r}")
+
+          # Perth is UTC+8 with no DST.
+          today = (datetime.datetime.now(datetime.timezone.utc)
+                   + datetime.timedelta(hours=8)).date()
+
+          # AIP publishes on weekdays only, so count weekdays, not calendar
+          # days: a Monday run must not trip over the weekend.
+          behind, d = 0, asof
+          while d < today:
+              d += datetime.timedelta(days=1)
+              if d.weekday() < 5:
+                  behind += 1
+
+          # The last row of weekly[] should be the live daily point.
+          weekly = data.get("weekly") or []
+          last_weekly = weekly[-1].get("d") if weekly else None
+
+          print(f"asof={asof}  today(Perth)={today}  weekdays_behind={behind}")
+          print(f"last weekly row={last_weekly}")
+          print(f"benchDate={data.get('benchDate')!r}")
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write(f"- `asof` **{asof}** ({behind} weekday(s) behind {today} Perth)\n")
+                  fh.write(f"- last `weekly` row: `{last_weekly}`\n")
+
+          if behind > MAX_WEEKDAYS_BEHIND:
+              sys.exit(
+                  f"FAIL: the page is {behind} weekdays behind (asof {asof}, "
+                  f"today {today} Perth). The update Action has stopped — "
+                  f"check the repo's Actions tab."
+              )
+
+          if last_weekly != asof_raw:
+              sys.exit(
+                  f"FAIL: the last weekly row is {last_weekly} but asof is "
+                  f"{asof_raw}. The final daily row is not tracking the page."
+              )
+
+          print("OK: the page is fresh.")
